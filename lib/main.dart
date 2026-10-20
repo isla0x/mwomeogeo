@@ -97,6 +97,18 @@ class MwomeogeoApp extends StatelessWidget {
         ),
       ),
     ),
+    builder: (context, child) => Actions(
+      actions: <Type, Action<Intent>>{
+        EditableTextTapOutsideIntent:
+            CallbackAction<EditableTextTapOutsideIntent>(
+              onInvoke: (intent) {
+                intent.focusNode.unfocus();
+                return null;
+              },
+            ),
+      },
+      child: child!,
+    ),
     home: HomeScreen(store: store),
   );
 }

@@ -58,6 +58,15 @@ void main() {
     await tester.tap(find.text('식탁 만들기'));
     await tester.pumpAndSettle();
     await tester.enterText(find.widgetWithText(TextField, '새 식탁 이름'), '첫 식탁');
+    await tester.pump();
+    expect(tester.testTextInput.isVisible, isTrue);
+    await tester.tap(find.textContaining('이 기기에 보관할 식탁을 만들어요.'));
+    await tester.pumpAndSettle();
+    expect(tester.testTextInput.isVisible, isFalse);
+    expect(find.text('첫 식탁'), findsOneWidget);
+    await tester.tap(find.widgetWithText(TextField, '새 식탁 이름'));
+    await tester.pumpAndSettle();
+    expect(tester.testTextInput.isVisible, isTrue);
     await tester.ensureVisible(find.text('식탁 만들기').last);
     await tester.tap(find.text('식탁 만들기').last);
     await tester.pumpAndSettle();
