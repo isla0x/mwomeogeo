@@ -80,7 +80,7 @@ firebase deploy --only firestore --project mwomeogeo
 python3 tool/configure_ios_firebase.py /파일경로/GoogleService-Info.plist
 ```
 
-기존 빌드 3은 Functions·Storage를 사용하는 버전이므로 **빌드 4로 업데이트해야 합니다.** 앱을 열 때마다 빌드하는 것은 아닙니다. 서버 설정 변경만으로 앱 재빌드가 필요한 것은 아니지만, 이번에는 앱의 저장 방식을 바꾸었으므로 한 번 업데이트합니다.
+기존 빌드 3은 Functions·Storage를 사용하는 버전이므로 **빌드 5로 업데이트해야 합니다.** 앱을 열 때마다 빌드하는 것은 아닙니다. 서버 설정 변경만으로 앱 재빌드가 필요한 것은 아니지만, 이번에는 앱의 저장 방식을 바꾸었으므로 한 번 업데이트합니다.
 
 공식 한도: https://firebase.google.com/docs/firestore/quotas
 
@@ -106,7 +106,7 @@ python3 tool/configure_ios_firebase.py /파일경로/GoogleService-Info.plist
 - test/shared_photo_test.dart에서 고해상도 사진 압축·크기 상한·비율 보존·잘못된 사진 입력을 검사
 - tool/rules/firestore.test.cjs에서 실제 Firestore 에뮬레이터로 58개 권한·공유 검사를 통과했습니다. 초대 없는 접근, 멤버 위조, 사진 크기 초과, 타인 삭제, 삭제 중 댓글 추가를 거부하고 정상 생성·초대·중복 참여·사진 공유·작성자 삭제·20명 제한을 확인합니다. 운영 서버에 테스트 계정이나 데이터를 만들지 않습니다.
 - Flutter 테스트 12개 통과, Dart 정적 분석 진단 0개입니다. 기본 분석 서버의 환경 제한 때문에 동일 analyzer 라이브러리로 lib/와 test/를 분석했습니다.
-- 실제 iPhone 두 기기 사이의 공유 확인은 빌드 4 설치 후 필요합니다.
+- 실제 iPhone 두 기기 사이의 공유 확인은 빌드 5 설치 후 필요합니다.
 - **iOS 네이티브 빌드·설치는 미검증**: 이 작업 환경은 Xcode 캐시 쓰기와 CoreSimulator 접근을 제한합니다.
 - Flutter 단위·화면 테스트와 별도 Flutter 엔진 검증기를 사용했습니다.
 - 사진 촬영 및 권한 거부/재허용 동작은 실제 iPhone에서 확인해야 합니다.
