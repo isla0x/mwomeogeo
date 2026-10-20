@@ -1,57 +1,103 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signedIn() {return request.auth != null;}
-    function member(tableId) {
-      return signedIn() && request.auth.uid in get(/databases/$(database)/documents/tables/$(tableId)).data.memberIds;
+    function signedIn() { return request.auth != null; }
+    function member(t) {
+      return signedIn() && request.auth.uid in get(/databases/$(database)/documents/tables/$(t)).data.memberIds;
     }
-    function text(value,max) {return value is string && value.size()>0 && value.size()<=max;}
-    function activePost(tableId,postId) {
-      let path=/databases/$(database)/documents/tables/$(tableId)/posts/$(postId);
-      return exists(path) && get(path).data.get('deleting',false)==false;
+    function text(v,n) { return v is string && v.size()>0 && v.size()<=n; }
+    function post(t,p) { return get(/databases/$(database)/documents/tables/$(t)/posts/$(p)).data; }
+    function active(t,p) { return post(t,p).get('deleting',false)==false; }
+    function removing(t,p) { return member(t) && post(t,p).authorId==request.auth.uid && !active(t,p); }
+    match /_invites/{code} {
+      // A 128-bit random code is a private invitation. Enumeration is forbidden.
+      allow get: if signedIn();
+      allow list,update,delete: if false;
+      allow create: if signedIn() && code.matches('^[0-9A-F]{32}$')
+        && request.resource.data.keys().hasAll(['tableId','ownerId'])
+        && request.resource.data.keys().hasOnly(['tableId','ownerId'])
+        && request.resource.data.ownerId==request.auth.uid
+        && request.resource.data.tableId is string
+        && !exists(/databases/$(database)/documents/tables/$(request.resource.data.tableId))
+        && getAfter(/databases/$(database)/documents/tables/$(request.resource.data.tableId)).data.ownerId==request.auth.uid
+        && getAfter(/databases/$(database)/documents/tables/$(request.resource.data.tableId)).data.inviteCode==code;
     }
     match /tables/{tableId} {
       allow read: if signedIn() && request.auth.uid in resource.data.memberIds;
-      allow write: if false;
+      allow create: if signedIn()
+        && request.resource.data.keys().hasAll(['name','ownerId','memberIds','inviteCode','createdAt','updatedAt'])
+        && request.resource.data.keys().hasOnly(['name','ownerId','memberIds','inviteCode','createdAt','updatedAt'])
+        && text(request.resource.data.name,20)
+        && request.resource.data.ownerId==request.auth.uid
+        && request.resource.data.memberIds==[request.auth.uid]
+        && request.resource.data.inviteCode is string
+        && request.resource.data.inviteCode.matches('^[0-9A-F]{32}$')
+        && getAfter(/databases/$(database)/documents/_invites/$(request.resource.data.inviteCode)).data.tableId==tableId
+        && getAfter(/databases/$(database)/documents/_invites/$(request.resource.data.inviteCode)).data.ownerId==request.auth.uid
+        && request.resource.data.createdAt==request.time && request.resource.data.updatedAt==request.time;
+      allow update: if signedIn()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds','joinCode','updatedAt'])
+        && request.resource.data.joinCode==resource.data.inviteCode
+        && request.resource.data.updatedAt==request.time
+        && request.resource.data.memberIds.size()<=20
+        && ((!(request.auth.uid in resource.data.memberIds)
+             && request.resource.data.memberIds==resource.data.memberIds.concat([request.auth.uid]))
+          || (request.auth.uid in resource.data.memberIds && request.resource.data.memberIds==resource.data.memberIds));
+      allow delete: if false;
+      match /photos/{postId} {
+        allow get: if member(tableId);
+        allow list,update: if false;
+        allow create: if member(tableId)
+          && request.resource.data.keys().hasAll(['authorId','data'])
+          && request.resource.data.keys().hasOnly(['authorId','data'])
+          && request.resource.data.authorId==request.auth.uid
+          && request.resource.data.data is bytes && request.resource.data.data.size()>0 && request.resource.data.data.size()<=131072
+          && getAfter(/databases/$(database)/documents/tables/$(tableId)/posts/$(postId)).data.authorId==request.auth.uid
+          && getAfter(/databases/$(database)/documents/tables/$(tableId)/posts/$(postId)).data.photoPath=='tables/'+tableId+'/photos/'+postId;
+        allow delete: if removing(tableId,postId);
+      }
       match /posts/{postId} {
         allow read: if member(tableId);
         allow create: if member(tableId)
           && request.resource.data.keys().hasAll(['authorId','authorName','photoPath','meal','caption','createdAt','updatedAt'])
           && request.resource.data.keys().hasOnly(['authorId','authorName','photoPath','meal','caption','createdAt','updatedAt'])
-          && request.resource.data.authorId==request.auth.uid
-          && text(request.resource.data.authorName,12)
+          && request.resource.data.authorId==request.auth.uid && text(request.resource.data.authorName,12)
           && request.resource.data.meal is int && request.resource.data.meal>=0 && request.resource.data.meal<=2
           && request.resource.data.caption is string && request.resource.data.caption.size()<=80
-          && request.resource.data.photoPath in ['tables/'+tableId+'/photos/'+postId+'/image.jpg','tables/'+tableId+'/photos/'+postId+'/image.png']
-          && request.resource.data.createdAt==request.time
-          && request.resource.data.updatedAt==request.time;
-        allow update: if member(tableId) && resource.data.get('deleting',false)==false
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['updatedAt'])
-          && request.resource.data.updatedAt==request.time;
-        allow delete: if false;
+          && request.resource.data.photoPath=='tables/'+tableId+'/photos/'+postId
+          && getAfter(/databases/$(database)/documents/tables/$(tableId)/photos/$(postId)).data.authorId==request.auth.uid
+          && request.resource.data.createdAt==request.time && request.resource.data.updatedAt==request.time;
+        allow update: if member(tableId) && request.resource.data.updatedAt==request.time
+          && ((resource.data.get('deleting',false)==false
+                && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['updatedAt']))
+            || (resource.data.authorId==request.auth.uid && request.resource.data.deleting==true
+                && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['deleting','updatedAt'])));
+        allow delete: if removing(tableId,postId)
+          && !existsAfter(/databases/$(database)/documents/tables/$(tableId)/photos/$(postId));
         match /comments/{commentId} {
-          allow read: if member(tableId) && activePost(tableId,postId);
-          allow create: if member(tableId) && activePost(tableId,postId)
+          allow read: if member(tableId);
+          allow create: if member(tableId) && active(tableId,postId)
             && request.resource.data.keys().hasAll(['authorId','authorName','body','createdAt'])
             && request.resource.data.keys().hasOnly(['authorId','authorName','body','createdAt'])
             && request.resource.data.authorId==request.auth.uid
             && text(request.resource.data.authorName,12) && text(request.resource.data.body,80)
             && request.resource.data.createdAt==request.time;
-          allow update,delete: if false;
+          allow delete: if removing(tableId,postId);
+          allow update: if false;
         }
         match /reactions/{reactionId} {
-          allow read: if member(tableId) && activePost(tableId,postId);
-          allow create: if member(tableId) && activePost(tableId,postId)
+          allow read: if member(tableId);
+          allow create: if member(tableId) && active(tableId,postId)
             && request.resource.data.keys().hasAll(['userId','kind'])
             && request.resource.data.keys().hasOnly(['userId','kind'])
-            && request.resource.data.userId==request.auth.uid
-            && request.resource.data.kind in ['heart','yum']
+            && request.resource.data.userId==request.auth.uid && request.resource.data.kind in ['heart','yum']
             && reactionId==request.auth.uid+'_'+request.resource.data.kind;
-          allow delete: if member(tableId) && activePost(tableId,postId) && resource.data.userId==request.auth.uid;
+          allow delete: if removing(tableId,postId)
+            || (member(tableId) && active(tableId,postId) && resource.data.userId==request.auth.uid);
           allow update: if false;
         }
       }
     }
-    match /{document=**} {allow read,write: if false;}
+    match /{path=**} { allow read,write: if false; }
   }
 }

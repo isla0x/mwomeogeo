@@ -380,7 +380,7 @@ class _TablesState extends State<_Tables> {
           const SizedBox(height: 25),
           TextField(
             controller: code,
-            maxLength: 12,
+            maxLength: 32,
             textCapitalization: TextCapitalization.characters,
             decoration: const InputDecoration(labelText: '받은 초대 코드'),
           ),

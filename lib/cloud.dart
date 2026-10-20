@@ -1,11 +1,12 @@
 import 'dart:io';
-import 'dart:typed_data';
+import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+
+import 'shared_photo.dart';
 
 import 'firebase_options.dart';
 import 'models.dart';
@@ -15,7 +16,6 @@ import 'models.dart';
 class CloudApi {
   static bool _ready = false;
   static String? initializationError;
-  static const functionsRegion = 'asia-northeast3';
   static Future<void> initialize() async {
     FirebaseOptions options;
     try {
@@ -34,9 +34,6 @@ class CloudApi {
   bool get configured => _ready;
   FirebaseAuth get _auth => FirebaseAuth.instance;
   FirebaseFirestore get _db => FirebaseFirestore.instance;
-  FirebaseStorage get _storage => FirebaseStorage.instance;
-  FirebaseFunctions get _functions =>
-      FirebaseFunctions.instanceFor(region: functionsRegion);
   bool get signedIn => configured && _auth.currentUser != null;
   String? get userId => signedIn ? _auth.currentUser!.uid : null;
   String? get displayName => signedIn ? _auth.currentUser!.displayName : null;
@@ -82,10 +79,13 @@ class CloudApi {
         'unauthorized' => '이 식탁을 볼 권한이 없어요. 초대 코드와 연결 설정을 확인해 주세요.',
         'not-found' => '식탁 연결 설정을 확인해 주세요.',
         'invalid-argument' => e.message ?? '입력한 내용을 확인해 주세요.',
-        'resource-exhausted' => '지금은 요청이 많아요. 잠시 후 다시 시도해 주세요.',
+        'resource-exhausted' =>
+          '무료 사용량 한도에 도달했어요. 잠시 후 다시 시도하거나 오래된 내 기록을 정리해 주세요.',
         _ => '식탁에 연결하지 못했어요. 잠시 후 다시 시도해 주세요.',
       };
       throw CloudFailure(message);
+    } on FormatException catch (e) {
+      throw CloudFailure(e.message);
     } on CloudFailure {
       rethrow;
     } catch (_) {
@@ -110,16 +110,47 @@ class CloudApi {
   Stream<List<DiningTable>> watchTables() =>
       _tablesQuery.snapshots().map(_readTables);
   Future<String> createTable(String name) => _guard(() async {
-    final result = await _functions.httpsCallable('createDiningTable').call({
-      'name': name.trim(),
+    final trimmed = name.trim();
+    if (trimmed.isEmpty || trimmed.length > 20) {
+      throw const CloudFailure('식탁 이름은 1~20자로 입력해 주세요.');
+    }
+    final random = Random.secure();
+    final code = List.generate(
+      16,
+      (_) => random.nextInt(256),
+    ).map((v) => v.toRadixString(16).padLeft(2, '0')).join().toUpperCase();
+    final table = _db.collection('tables').doc();
+    final batch = _db.batch();
+    batch.set(table, {
+      'name': trimmed,
+      'ownerId': userId,
+      'memberIds': [userId],
+      'inviteCode': code,
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
     });
-    return result.data['tableId'] as String;
+    batch.set(_db.collection('_invites').doc(code), {
+      'tableId': table.id,
+      'ownerId': userId,
+    });
+    await batch.commit();
+    return table.id;
   });
   Future<String> joinTable(String code) => _guard(() async {
-    final result = await _functions.httpsCallable('joinDiningTable').call({
-      'code': code.trim().toUpperCase(),
+    final normalized = code.trim().toUpperCase();
+    if (!RegExp(r'^[0-9A-F]{32}$').hasMatch(normalized)) {
+      throw const CloudFailure('복사한 초대 코드 32자리를 입력해 주세요.');
+    }
+    final invite = await _db.collection('_invites').doc(normalized).get();
+    if (!invite.exists) throw const CloudFailure('초대 코드를 다시 확인해 주세요.');
+    final id = invite.data()!['tableId'] as String;
+    // The rules verify the code and allow only this user's membership addition.
+    await _db.collection('tables').doc(id).update({
+      'memberIds': FieldValue.arrayUnion([userId]),
+      'joinCode': normalized,
+      'updatedAt': FieldValue.serverTimestamp(),
     });
-    return result.data['tableId'] as String;
+    return id;
   });
   CollectionReference<Map<String, dynamic>> _postCollection(String tableId) =>
       _db.collection('tables').doc(tableId).collection('posts');
@@ -159,11 +190,7 @@ class CloudApi {
   Future<List<MealPost>> _readPosts(
     String tableId,
     QuerySnapshot<Map<String, dynamic>> snapshot,
-  ) => Future.wait(
-    snapshot.docs
-        .where((doc) => doc.data()['deleting'] != true)
-        .map((doc) => _readPost(tableId, doc)),
-  );
+  ) => Future.wait(snapshot.docs.map((doc) => _readPost(tableId, doc)));
   Future<List<MealPost>> posts(String tableId) => _guard(
     () async => _readPosts(
       tableId,
@@ -187,15 +214,20 @@ class CloudApi {
       _photoSizes.remove(oldest);
     }
     final future = _guard(() async {
-      final bytes = await _storage.ref(path).getData(10 * 1024 * 1024);
-      if (bytes == null) throw const CloudFailure('사진을 불러오지 못했어요.');
+      final photo = await _db.doc(path).get();
+      final blob = photo.data()?['data'];
+      if (blob is! Blob) throw const CloudFailure('사진을 불러오지 못했어요.');
+      final bytes = blob.bytes;
       return bytes;
     });
     _photos[path] = future;
     future.then<void>(
       (bytes) {
         _photoSizes[path] = bytes.length;
-        while (_photoSizes.values.fold<int>(0, (totalBytes, size) => totalBytes + size) >
+        while (_photoSizes.values.fold<int>(
+                  0,
+                  (totalBytes, size) => totalBytes + size,
+                ) >
                 24 * 1024 * 1024 &&
             _photos.length > 1) {
           final oldest = _photos.keys.first;
@@ -217,25 +249,21 @@ class CloudApi {
     List<String> tableIds,
     String author,
   ) => _guard(() async {
-    final bytes = await file.readAsBytes();
-    final png = bytes.length > 4 && bytes[0] == 0x89 && bytes[1] == 0x50;
-    final jpeg = bytes.length > 2 && bytes[0] == 0xff && bytes[1] == 0xd8;
-    if (!png && !jpeg) throw const CloudFailure('JPEG 또는 PNG 사진을 골라 주세요.');
-    if (bytes.length > 10 * 1024 * 1024) {
+    if (tableIds.isEmpty || tableIds.length > 5) {
+      throw const CloudFailure('한 번에 식탁 1~5개를 선택해 주세요.');
+    }
+    final input = await file.readAsBytes();
+    if (input.length > 10 * 1024 * 1024) {
       throw const CloudFailure('사진은 10MB 이하로 골라 주세요.');
     }
-    final extension = png ? 'png' : 'jpg';
-    final metadata = SettableMetadata(
-      contentType: png ? 'image/png' : 'image/jpeg',
-      customMetadata: {'authorId': userId!},
-    );
+    final bytes = await compute(encodeSharedPhoto, input);
     final batch = _db.batch();
     final result = <MealPost>[];
     final now = DateTime.now();
     for (final tableId in tableIds) {
       final id = newId();
-      final path = 'tables/$tableId/photos/$id/image.$extension';
-      await _storage.ref(path).putData(bytes, metadata);
+      final path = 'tables/$tableId/photos/$id';
+      batch.set(_db.doc(path), {'authorId': userId, 'data': Blob(bytes)});
       batch.set(_postCollection(tableId).doc(id), {
         'authorId': userId,
         'authorName': author,
@@ -286,10 +314,27 @@ class CloudApi {
     await batch.commit();
   });
   Future<void> deletePost(MealPost post) => _guard(() async {
-    await _functions.httpsCallable('deleteMealPost').call({
-      'tableId': post.tableIds.single,
-      'postId': post.id,
+    final ref = _postCollection(post.tableIds.single).doc(post.id);
+    // Freeze replies first. A failed cleanup can be retried; the post stays visible.
+    await ref.update({
+      'deleting': true,
+      'updatedAt': FieldValue.serverTimestamp(),
     });
+    for (final name in ['comments', 'reactions']) {
+      while (true) {
+        final children = await ref.collection(name).limit(100).get();
+        if (children.docs.isEmpty) break;
+        final batch = _db.batch();
+        for (final child in children.docs) {
+          batch.delete(child.reference);
+        }
+        await batch.commit();
+      }
+    }
+    final batch = _db.batch();
+    batch.delete(_db.doc(post.photo.substring(6)));
+    batch.delete(ref);
+    await batch.commit();
     _photos.remove(post.photo.substring(6));
   });
 }
