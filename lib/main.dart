@@ -69,30 +69,28 @@ class MwomeogeoApp extends StatelessWidget {
     theme: ThemeData(
       useMaterial3: true,
       fontFamily: 'Pretendard',
-      scaffoldBackgroundColor: Colors.white,
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: cherry,
-        surface: Colors.white,
-      ),
+      scaffoldBackgroundColor: milk,
+      colorScheme: ColorScheme.fromSeed(seedColor: cherry, surface: milk),
       textTheme: TextTheme(bodyMedium: type(14), bodyLarge: type(16)),
       dividerColor: line,
+      dividerTheme: const DividerThemeData(color: line, thickness: 1),
       appBarTheme: const AppBarTheme(
-        backgroundColor: Colors.white,
+        backgroundColor: milk,
         surfaceTintColor: Colors.transparent,
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: soft,
+        fillColor: Colors.transparent,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
           borderSide: const BorderSide(color: line),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
           borderSide: const BorderSide(color: line),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
           borderSide: const BorderSide(color: cherry),
         ),
       ),
@@ -195,56 +193,46 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     builder: (context, _) => Scaffold(
       body: SafeArea(
         bottom: false,
-        child: Stack(
-          children: [
-            RefreshIndicator(
-              onRefresh: refresh,
-              color: cherry,
-              child: CustomScrollView(
-                key: ValueKey(page),
-                physics: const AlwaysScrollableScrollPhysics(),
-                slivers: [
-                  SliverToBoxAdapter(child: header()),
-                  if (s.table == null)
-                    SliverToBoxAdapter(child: emptyTables())
-                  else if (page == 0)
-                    ...feed()
-                  else
-                    ...calendar(),
-                  SliverToBoxAdapter(
-                    child: SizedBox(
-                      height: 116 + MediaQuery.paddingOf(context).bottom,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Positioned(
-              bottom: MediaQuery.paddingOf(context).bottom + 12,
-              left: 24,
-              right: 24,
-              child: navigation(),
-            ),
-          ],
+        child: RefreshIndicator(
+          onRefresh: refresh,
+          color: cherry,
+          child: CustomScrollView(
+            key: ValueKey(page),
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              SliverToBoxAdapter(child: header()),
+              if (s.table == null)
+                SliverFillRemaining(hasScrollBody: false, child: emptyTables())
+              else if (page == 0)
+                ...feed()
+              else
+                ...calendar(),
+              if (s.table != null)
+                const SliverToBoxAdapter(child: SizedBox(height: 24)),
+            ],
+          ),
         ),
       ),
+      bottomNavigationBar: navigation(),
     ),
   );
+
   Widget header() => Padding(
-    padding: const EdgeInsets.fromLTRB(24, 12, 16, 10),
+    padding: const EdgeInsets.fromLTRB(24, 6, 16, 0),
     child: Row(
       children: [
         Semantics(
           header: true,
           child: Text(
             '뭐먹어?',
-            style: type(27, weight: FontWeight.w700, spacing: -1.8),
+            style: type(24, weight: FontWeight.w700, spacing: -1.3),
           ),
         ),
         Container(
           width: 4,
           height: 4,
-          margin: const EdgeInsets.only(left: 4, top: 14),
+          margin: const EdgeInsets.only(left: 3, top: 12),
           decoration: const BoxDecoration(
             color: cherry,
             shape: BoxShape.circle,
@@ -252,116 +240,106 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         ),
         const Spacer(),
         if (refreshing)
-          const Padding(
-            padding: EdgeInsets.only(right: 12),
-            child: SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 1.5),
-            ),
+          const SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(strokeWidth: 1.5),
           ),
-        IconButton(
-          tooltip: '식탁 소식',
-          onPressed: () => notifications(context, s),
-          icon: const Icon(CupertinoIcons.bell, size: 21),
-        ),
         IconButton(
           tooltip: '내 정보와 식탁 관리',
           onPressed: () => openSettings(context, s),
-          icon: Avatar(s.name, size: 30),
+          icon: Avatar(s.name, size: 34),
         ),
       ],
     ),
   );
+
   Widget groups() => Padding(
     padding: const EdgeInsets.symmetric(horizontal: 24),
-    child: Row(
-      children: [
-        Expanded(
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                for (final g in s.tables)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 5),
-                    child: TextButton(
-                      style: TextButton.styleFrom(
-                        backgroundColor: s.tableId == g.id
-                            ? sky
-                            : Colors.transparent,
-                        foregroundColor: s.tableId == g.id
-                            ? const Color(0xff405d73)
-                            : muted,
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(7),
-                        ),
-                      ),
-                      onPressed: () => s.selectTable(g.id),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            g.name,
-                            style: type(
-                              12,
-                              color: s.tableId == g.id
-                                  ? const Color(0xff405d73)
-                                  : muted,
-                            ),
-                          ),
-                          const SizedBox(width: 9),
-                          Text(
-                            '${s.demo && !g.isCloud ? (g.id.endsWith('couple') ? 2 : 4) : g.memberCount}'
-                                .padLeft(2, '0'),
-                            style: type(10, color: muted),
-                          ),
-                        ],
-                      ),
+    child: Container(
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: line)),
+      ),
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        children: [
+          Flexible(
+            child: TextButton(
+              onPressed: () => openTables(context, s),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                minimumSize: const Size(44, 44),
+                foregroundColor: ink,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Text(
+                      s.table!.name,
+                      overflow: TextOverflow.ellipsis,
+                      style: type(13, weight: FontWeight.w500),
                     ),
                   ),
-                IconButton(
-                  tooltip: '식탁 만들기 또는 참여',
-                  onPressed: () => openTables(context, s),
-                  icon: const Icon(CupertinoIcons.plus, size: 16),
-                ),
-              ],
+                  const SizedBox(width: 8),
+                  const Icon(CupertinoIcons.chevron_down, size: 11),
+                ],
+              ),
             ),
           ),
-        ),
-        const SizedBox(width: 6),
-        const Icon(CupertinoIcons.lock_shield, size: 12, color: muted),
-        const SizedBox(width: 4),
-        Text('우리끼리만', style: type(10, color: muted)),
-      ],
+          const SizedBox(width: 12),
+          Text(
+            '${s.demo ? (s.tableId.endsWith('couple') ? 2 : 4) : s.table!.memberCount}명',
+            style: type(11, color: muted),
+          ),
+          const Spacer(),
+          IconButton(
+            tooltip: '식탁 만들기 또는 참여',
+            onPressed: () => openTables(context, s),
+            icon: const Icon(CupertinoIcons.plus, size: 16, color: muted),
+          ),
+        ],
+      ),
     ),
   );
+
   Widget emptyTables() => Padding(
-    padding: const EdgeInsets.fromLTRB(24, 60, 24, 24),
+    padding: const EdgeInsets.fromLTRB(24, 12, 24, 28),
     child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Text('식탁 0개', style: type(12, color: muted)),
+        ),
+        const SizedBox(height: 22),
+        Image.asset(
+          'assets/illustrations/first-table.png',
+          height: (MediaQuery.sizeOf(context).width * .50).clamp(130.0, 200.0),
+          fit: BoxFit.contain,
+          excludeFromSemantics: true,
+        ),
+        const SizedBox(height: 20),
         Text(
-          '아직 함께하는 식탁이 없어요.',
-          style: type(25, weight: FontWeight.w500, height: 1.4),
+          '우리의 첫 식탁을\n만들어요',
+          textAlign: TextAlign.center,
+          style: type(27, weight: FontWeight.w600, spacing: -1, height: 1.35),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 15),
         Text(
-          '식탁 0개 · 가까운 사람들과 첫 식탁을 만들어 보세요.\n이미 초대받았다면 코드로 참여할 수 있어요.',
-          style: type(13, color: muted, height: 1.8),
+          '한 끼 사진으로 나누는\n가까운 사람들의 안부.',
+          textAlign: TextAlign.center,
+          style: type(14, color: muted, height: 1.7),
         ),
-        const SizedBox(height: 28),
-        PrimaryButton(
-          '식탁 만들기',
-          onPressed: () => openTables(context, s),
-          icon: CupertinoIcons.plus,
-        ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 30),
+        PrimaryButton('첫 식탁 만들기', onPressed: () => openTables(context, s)),
+        const SizedBox(height: 8),
         TextButton(
           onPressed: () => openTables(context, s),
-          child: const Text('초대 코드로 참여'),
+          child: Text('초대 코드로 참여하기', style: type(14, color: cherry)),
         ),
+        const SizedBox(height: 14),
+        Text('회원가입 없이 시작해요.', style: type(11, color: muted)),
         if (s.syncError != null) ...[
           const SizedBox(height: 18),
           Text(s.syncError!, style: type(12, color: cherry)),
@@ -369,237 +347,228 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       ],
     ),
   );
+
   List<Widget> feed() {
     final posts = s.postsOn(now);
     final meals = [
-      for (var i = 0; i < 3; i++)
-        posts.where((post) => post.meal == i).toList(),
+      for (var i = 0; i < 3; i++) posts.where((p) => p.meal == i).toList(),
     ];
     return [
       SliverToBoxAdapter(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            groups(),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 16, 4),
+              child: Row(
+                children: [
+                  Text(dayLabel(now), style: type(12, color: muted)),
+                  const Spacer(),
+                  IconButton(
+                    tooltip: '달력 보기',
+                    onPressed: () => setState(() => page = 1),
+                    icon: const Icon(
+                      CupertinoIcons.calendar,
+                      size: 18,
+                      color: muted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 10),
+              child: Text(
+                '오늘도, 잘 먹었어?',
+                style: type(
+                  25,
+                  weight: FontWeight.w600,
+                  spacing: -1.1,
+                  height: 1.35,
+                ),
+              ),
+            ),
             if (s.syncError != null)
               Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 24,
                   vertical: 8,
                 ),
-                child: Text(s.syncError!, style: type(11, color: cherry)),
-              ),
-            groups(),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 26, 24, 24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '${dayLabel(now)}  ─  하루의 기록',
-                    style: type(11, color: muted),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    MediaQuery.sizeOf(context).width < 350 ||
-                            MediaQuery.textScalerOf(context).scale(1) > 1.2
-                        ? '오늘도\n잘 먹고 있어?'
-                        : '오늘도 잘 먹고 있어?',
-                    style: type(
-                      30,
-                      weight: FontWeight.w500,
-                      spacing: -1.8,
-                      height: 1.3,
-                    ),
-                  ),
-                  const SizedBox(height: 9),
-                  Text('한 끼 사진으로 나누는, 우리의 안부.', style: type(12, color: muted)),
-                ],
-              ),
-            ),
-            if (s.demo)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 12, 20, 0),
-                child: Row(
-                  children: [
-                    Text('디자인 미리보기 · 예시 식탁', style: type(10, color: muted)),
-                    const Spacer(),
-                    TextButton(
-                      onPressed: () => s.setDemo(false),
-                      child: Text('내 기록 시작', style: type(11, color: cherry)),
-                    ),
-                  ],
-                ),
+                child: Text(s.syncError!, style: type(12, color: cherry)),
               ),
             if (!s.demo && s.table?.isCloud == false)
               Padding(
-                padding: const EdgeInsets.fromLTRB(24, 14, 24, 0),
-                child: Text(
-                  '이 기기에 보관 중 · 함께 보려면 공유 식탁을 연결해 주세요.',
-                  style: type(10, color: muted),
-                ),
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+                child: Text('이 기기에 보관 중', style: type(10, color: muted)),
               ),
-            const SizedBox(height: 8),
           ],
         ),
       ),
-      for (var i = 0; i < 3; i++) ...[
-        SliverToBoxAdapter(
-          child: Padding(
-            key: ValueKey('meal-section-$i'),
-            padding: const EdgeInsets.fromLTRB(24, 12, 24, 8),
-            child: Row(
-              children: [
-                Icon(mealIcons[i], size: 18, color: cherry),
-                const SizedBox(width: 8),
-                Text(mealNames[i], style: type(15, weight: FontWeight.w500)),
-                const SizedBox(width: 8),
-                Text('${meals[i].length}', style: type(11, color: muted)),
-                const Spacer(),
-                TextButton(
-                  onPressed: () => capture(initialMeal: i),
-                  child: Text(
-                    '${mealNames[i]} 남기기',
-                    style: type(11, color: cherry),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        if (meals[i].isEmpty)
-          SliverToBoxAdapter(child: emptyMeal(i))
-        else
-          SliverList.builder(
-            itemCount: meals[i].length,
-            itemBuilder: (context, index) => Padding(
-              padding: const EdgeInsets.fromLTRB(24, 0, 24, 18),
-              child: PostCard(post: meals[i][index], store: s),
-            ),
-          ),
-      ],
-      if (posts.isNotEmpty)
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: capture,
-              child: Container(
-                padding: const EdgeInsets.all(17),
-                decoration: BoxDecoration(
-                  color: soft,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '오늘의 한 끼도 놓아둘까요?',
-                            style: type(
-                              13,
-                              color: const Color(0xff4f687c),
-                              weight: FontWeight.w500,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '사진 한 장으로, 오늘의 안부를.',
-                            style: type(11, color: muted),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Icon(
-                      CupertinoIcons.chevron_right,
-                      size: 17,
-                      color: muted,
-                    ),
-                  ],
+      for (var i = 0; i < 3; i++) ...mealSection(i, meals[i]),
+    ];
+  }
+
+  List<Widget> mealSection(int meal, List<MealPost> posts) {
+    if (posts.isEmpty) return [SliverToBoxAdapter(child: emptyMeal(meal))];
+    final paired =
+        posts.length > 1 &&
+        MediaQuery.sizeOf(context).width >= 360 &&
+        MediaQuery.textScalerOf(context).scale(1) < 1.3;
+    Widget card(int index) => PostCard(
+      key: ValueKey('post-${posts[index].id}'),
+      post: posts[index],
+      store: s,
+      compact: true,
+      tile: paired,
+    );
+    return [
+      SliverToBoxAdapter(
+        child: Padding(
+          key: ValueKey('meal-section-$meal'),
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Row(
+            children: [
+              Icon(mealIcons[meal], size: 20, color: cherry),
+              const SizedBox(width: 9),
+              Text(mealNames[meal], style: type(14, weight: FontWeight.w600)),
+              const SizedBox(width: 8),
+              Text('${posts.length}', style: type(11, color: muted)),
+              const Spacer(),
+              TextButton(
+                onPressed: () => capture(initialMeal: meal),
+                child: Text(
+                  '+ 남기기',
+                  semanticsLabel: '${mealNames[meal]} 남기기',
+                  style: type(12, color: cherry),
                 ),
               ),
-            ),
+            ],
           ),
         ),
+      ),
+      SliverList.builder(
+        itemCount: paired ? (posts.length + 1) ~/ 2 : posts.length,
+        itemBuilder: (context, index) => Padding(
+          padding: const EdgeInsets.fromLTRB(24, 0, 24, 10),
+          child: paired
+              ? Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: card(index * 2)),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: index * 2 + 1 < posts.length
+                          ? card(index * 2 + 1)
+                          : const SizedBox.shrink(),
+                    ),
+                  ],
+                )
+              : card(index),
+        ),
+      ),
     ];
   }
 
   Widget emptyMeal(int meal) => Padding(
-    padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+    key: ValueKey('meal-section-$meal'),
+    padding: const EdgeInsets.symmetric(horizontal: 24),
     child: Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-      decoration: BoxDecoration(
-        color: soft,
-        borderRadius: BorderRadius.circular(12),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: line)),
       ),
-      child: Text(
-        '아직 남긴 ${mealNames[meal]} 사진이 없어요.',
-        style: type(12, color: muted),
-      ),
-    ),
-  );
-  Widget navigation() => Container(
-    padding: const EdgeInsets.all(5),
-    decoration: BoxDecoration(
-      color: Colors.white.withValues(alpha: .98),
-      borderRadius: BorderRadius.circular(18),
-      border: Border.all(color: line),
-      boxShadow: [
-        BoxShadow(
-          color: ink.withValues(alpha: .05),
-          blurRadius: 24,
-          offset: const Offset(0, 5),
-        ),
-      ],
-    ),
-    child: Row(
-      children: [
-        Expanded(
-          child: navItem(
-            CupertinoIcons.tray,
-            '우리 식탁',
-            page == 0,
-            () => setState(() => page = 0),
-          ),
-        ),
-        Expanded(
-          flex: 2,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 9),
-            child: FilledButton.icon(
-              onPressed: capture,
-              icon: const Icon(CupertinoIcons.camera, size: 19),
-              label: const FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text('한 끼 남기기'),
-              ),
-              style: FilledButton.styleFrom(
-                backgroundColor: cherry,
-                foregroundColor: Colors.white,
-                minimumSize: const Size(0, 47),
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                textStyle: type(12, weight: FontWeight.w500),
-              ),
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(mealIcons[meal], size: 20, color: cherry),
+          const SizedBox(width: 9),
+          Text(mealNames[meal], style: type(14, weight: FontWeight.w600)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              '아직 남긴 ${mealNames[meal]} 사진이 없어요.',
+              style: type(11, color: muted),
             ),
           ),
-        ),
-        Expanded(
-          child: navItem(
-            CupertinoIcons.calendar,
-            '모아보기',
-            page == 1,
-            () => setState(() => page = 1),
+          TextButton(
+            onPressed: () => capture(initialMeal: meal),
+            child: Text(
+              '+ 남기기',
+              semanticsLabel: '${mealNames[meal]} 남기기',
+              style: type(12, color: cherry),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     ),
   );
+
+  Widget navigation() => Container(
+    decoration: const BoxDecoration(
+      color: milk,
+      border: Border(top: BorderSide(color: line)),
+    ),
+    child: SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 4, 24, 4),
+        child: Row(
+          children: [
+            Expanded(
+              child: navItem(
+                CupertinoIcons.house,
+                '식탁',
+                page == 0,
+                () => setState(() => page = 0),
+              ),
+            ),
+            Expanded(
+              child: Semantics(
+                button: true,
+                label: '한 끼 남기기',
+                child: InkWell(
+                  onTap: capture,
+                  borderRadius: BorderRadius.circular(22),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration: const BoxDecoration(
+                            color: cherry,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            CupertinoIcons.camera,
+                            size: 22,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text('남기기', style: type(10, color: muted)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Expanded(
+              child: navItem(
+                CupertinoIcons.doc_plaintext,
+                '기록',
+                page == 1,
+                () => setState(() => page = 1),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+
   Widget navItem(
     IconData icon,
     String label,
@@ -607,22 +576,33 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     VoidCallback action,
   ) => Semantics(
     selected: active,
+    button: true,
     child: InkWell(
       onTap: action,
       borderRadius: BorderRadius.circular(12),
       child: SizedBox(
-        height: 51,
+        height: 62,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 21, color: active ? cherry : muted),
-            const SizedBox(height: 3),
+            Icon(icon, size: 22, color: active ? cherry : muted),
+            const SizedBox(height: 5),
             Text(label, style: type(10, color: active ? cherry : muted)),
+            const SizedBox(height: 3),
+            Container(
+              width: 3,
+              height: 3,
+              decoration: BoxDecoration(
+                color: active ? cherry : Colors.transparent,
+                shape: BoxShape.circle,
+              ),
+            ),
           ],
         ),
       ),
     ),
   );
+
   List<Widget> calendar() {
     final days = DateUtils.getDaysInMonth(month.year, month.month);
     final offset = month.weekday % 7;
@@ -647,12 +627,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('하루 세 번, 차곡차곡', style: type(11, color: muted)),
+                  Text('하루 세 번, 차곡차곡', style: type(12, color: muted)),
                   const SizedBox(height: 12),
                   Text(
                     '함께 쌓이는,',
                     style: type(
-                      29,
+                      25,
                       weight: FontWeight.w500,
                       spacing: -1.5,
                       height: 1.4,
@@ -661,7 +641,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   Text(
                     '우리의 하루.',
                     style: type(
-                      29,
+                      25,
                       color: cherry,
                       weight: FontWeight.w500,
                       spacing: -1.5,

@@ -10,9 +10,17 @@ import 'models.dart';
 import 'store.dart';
 
 class PostCard extends StatefulWidget {
-  const PostCard({super.key, required this.post, required this.store});
+  const PostCard({
+    super.key,
+    required this.post,
+    required this.store,
+    this.compact = false,
+    this.tile = false,
+  });
   final MealPost post;
   final MealStore store;
+  final bool compact;
+  final bool tile;
   @override
   State<PostCard> createState() => _PostCardState();
 }
@@ -38,124 +46,95 @@ class _PostCardState extends State<PostCard> {
     final user = p.isCloud ? s.cloud.userId : 'local';
     final liked = p.reactions.contains('$user:heart');
     final hungry = p.reactions.contains('$user:yum');
+    final likes = p.reactions.where((r) => r.endsWith(':heart')).length;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(top: 12, bottom: 12),
-          child: Row(
-            children: [
-              Avatar(p.author, size: 31),
-              const SizedBox(width: 9),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(p.author, style: type(13, weight: FontWeight.w500)),
-                    Text(
-                      p.isDemo
-                          ? '회사에서 남긴 한 끼 · 예시'
-                          : p.isCloud
-                          ? '함께 나눈 한 끼'
-                          : '내가 남긴 한 끼',
-                      style: type(10, color: muted),
-                    ),
-                  ],
-                ),
-              ),
-              Text(timeLabel(p.date), style: type(11, color: muted)),
-              if (!p.isDemo)
-                PopupMenuButton<String>(
-                  tooltip: '기록 메뉴',
-                  padding: EdgeInsets.zero,
-                  iconSize: 17,
-                  onSelected: (value) {
-                    if (value == 'share') {
-                      sharePhoto();
-                    } else {
-                      deletePost();
-                    }
-                  },
-                  itemBuilder: (_) => [
-                    const PopupMenuItem(
-                      value: 'share',
-                      child: Text('사진과 한마디 공유'),
-                    ),
-                    if (!p.isCloud || p.authorId == s.cloud.userId)
-                      const PopupMenuItem(
-                        value: 'delete',
-                        child: Text('기록 삭제'),
-                      ),
-                  ],
-                ),
-            ],
-          ),
-        ),
-        GestureDetector(
-          onTap: () => showAppSheet(
-            context,
-            title: '${mealNames[p.meal]}의 기록',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                AspectRatio(
-                  aspectRatio: 1,
-                  child: MealPhoto(p, s, edition: false),
-                ),
-                const SizedBox(height: 16),
-                Text(p.caption, style: type(15)),
-                const SizedBox(height: 12),
-                Text(
-                  '${dayLabel(p.date)} ${timeLabel(p.date)}',
-                  style: type(11, color: muted),
-                ),
-              ],
-            ),
-          ),
-          child: MealPhoto(
-            p,
-            s,
-            height: (MediaQuery.sizeOf(context).width - 48) * .79,
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.only(top: 14, bottom: 2),
-          child: Text(
-            p.caption.isEmpty ? '오늘도 잘 챙겨 먹었어요.' : p.caption,
-            style: type(14),
-          ),
-        ),
         Row(
           children: [
-            TextButton.icon(
+            Avatar(p.author, size: widget.compact ? 24 : 30),
+            const SizedBox(width: 7),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    p.author,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: type(12, color: muted),
+                  ),
+                  if (widget.tile)
+                    Text(timeLabel(p.date), style: type(10, color: muted)),
+                ],
+              ),
+            ),
+            if (!widget.tile)
+              Text(timeLabel(p.date), style: type(10, color: muted)),
+            PopupMenuButton<String>(
+              tooltip: '기록 메뉴',
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+              icon: const Icon(CupertinoIcons.ellipsis, size: 18, color: muted),
+              onSelected: (value) {
+                if (value == 'share') {
+                  sharePhoto();
+                } else if (value == 'yum') {
+                  react('yum');
+                } else {
+                  deletePost();
+                }
+              },
+              itemBuilder: (_) => [
+                PopupMenuItem(
+                  value: 'yum',
+                  child: Text(hungry ? '한 입만 취소' : '한 입만'),
+                ),
+                if (!p.isDemo)
+                  const PopupMenuItem(
+                    value: 'share',
+                    child: Text('사진과 한마디 공유'),
+                  ),
+                if (!p.isDemo && (!p.isCloud || p.authorId == s.cloud.userId))
+                  const PopupMenuItem(value: 'delete', child: Text('기록 삭제')),
+              ],
+            ),
+          ],
+        ),
+        Semantics(
+          button: true,
+          label: '${mealNames[p.meal]} 사진 크게 보기',
+          child: GestureDetector(
+            onTap: openPhoto,
+            child: AspectRatio(
+              aspectRatio: widget.tile
+                  ? 1.1
+                  : (widget.compact ? (p.meal == 0 ? 2 : 2.5) : 1.27),
+              child: MealPhoto(p, s, edition: false),
+            ),
+          ),
+        ),
+        if (widget.tile) caption(),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            if (!widget.tile) Expanded(child: caption()) else const Spacer(),
+            IconButton(
+              tooltip: '잘 먹었네 $likes',
               onPressed: busy ? null : () => react('heart'),
-              icon: Icon(
-                liked ? CupertinoIcons.heart_fill : CupertinoIcons.heart,
-                size: 18,
-                color: liked ? cherry : muted,
-              ),
-              label: Text(
-                '잘 먹었네${p.reactions.where((r) => r.endsWith(':heart')).isNotEmpty ? '  ${p.reactions.where((r) => r.endsWith(':heart')).length}' : ''}',
-                style: type(12, color: liked ? cherry : muted),
-              ),
-              style: TextButton.styleFrom(
-                padding: EdgeInsets.zero,
-                minimumSize: const Size(0, 44),
-              ),
-            ),
-            const SizedBox(width: 18),
-            TextButton(
-              onPressed: busy ? null : () => react('yum'),
-              style: TextButton.styleFrom(
-                padding: EdgeInsets.zero,
-                minimumSize: const Size(0, 44),
-              ),
-              child: Text(
-                '한 입만${hungry ? ' · 1' : ''}',
-                style: type(12, color: hungry ? cherry : muted),
+              icon: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    liked ? CupertinoIcons.heart_fill : CupertinoIcons.heart,
+                    size: 19,
+                    color: liked ? cherry : muted,
+                  ),
+                  const SizedBox(width: 4),
+                  Text('$likes', style: type(10, color: muted)),
+                ],
               ),
             ),
-            const Spacer(),
             IconButton(
               tooltip: '한마디 남기기',
               onPressed: () => openComments(context, p, s),
@@ -167,18 +146,49 @@ class _PostCardState extends State<PostCard> {
                     size: 18,
                     color: muted,
                   ),
-                  if (p.comments.isNotEmpty) ...[
-                    const SizedBox(width: 4),
-                    Text('${p.comments.length}', style: type(11, color: muted)),
-                  ],
+                  const SizedBox(width: 4),
+                  Text('${p.comments.length}', style: type(10, color: muted)),
                 ],
               ),
             ),
           ],
         ),
+        const Divider(height: 1),
       ],
     );
   }
+
+  Widget caption() => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 9),
+    child: Text(
+      p.caption.isEmpty ? '오늘도 잘 챙겨 먹었어요.' : p.caption,
+      maxLines: widget.compact ? 2 : null,
+      overflow: widget.compact ? TextOverflow.ellipsis : null,
+      style: type(widget.compact ? 12 : 14),
+    ),
+  );
+
+  void openPhoto() => showAppSheet(
+    context,
+    title: '${mealNames[p.meal]}의 기록',
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AspectRatio(aspectRatio: 1, child: MealPhoto(p, s, edition: false)),
+        const SizedBox(height: 16),
+        Text(p.caption.isEmpty ? '오늘도 잘 챙겨 먹었어요.' : p.caption, style: type(15)),
+        const SizedBox(height: 12),
+        Text(
+          '${dayLabel(p.date)} ${timeLabel(p.date)}',
+          style: type(11, color: muted),
+        ),
+        TextButton(
+          onPressed: busy ? null : () => react('yum'),
+          child: const Text('한 입만'),
+        ),
+      ],
+    ),
+  );
 
   Future<void> sharePhoto() async {
     try {

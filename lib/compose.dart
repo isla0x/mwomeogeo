@@ -83,28 +83,20 @@ class _CaptureScreenState extends State<CaptureScreen> {
   Widget build(BuildContext context) => PopScope(
     canPop: !busy,
     child: Scaffold(
-      backgroundColor: photo == null ? const Color(0xff242b33) : Colors.white,
+      backgroundColor: milk,
       appBar: AppBar(
-        backgroundColor: photo == null ? const Color(0xff242b33) : Colors.white,
-        foregroundColor: photo == null ? Colors.white : ink,
-        leading: IconButton(
-          tooltip: '닫기',
+        backgroundColor: milk,
+        foregroundColor: ink,
+        leadingWidth: 72,
+        leading: TextButton(
           onPressed: busy
               ? null
               : () => Navigator.pop(context, success ? meal : null),
-          icon: const Icon(CupertinoIcons.xmark, size: 20),
+          child: Text(success ? '닫기' : '취소', style: type(14, color: muted)),
         ),
         title: Text(
-          success
-              ? '한 끼의 안부'
-              : photo == null
-              ? '한 끼 남기기'
-              : '오늘의 한 끼',
-          style: type(
-            17,
-            color: photo == null ? Colors.white : ink,
-            weight: FontWeight.w500,
-          ),
+          success ? '한 끼의 안부' : '한 끼 남기기',
+          style: type(17, weight: FontWeight.w500),
         ),
         centerTitle: true,
       ),
@@ -117,234 +109,246 @@ class _CaptureScreenState extends State<CaptureScreen> {
       ),
     ),
   );
-  Widget mealSelector({bool dark = false}) => Row(
-    mainAxisAlignment: MainAxisAlignment.center,
-    children: [
-      for (var i = 0; i < 3; i++)
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 3),
-          child: ChoiceChip(
-            label: Text(mealNames[i]),
-            selected: meal == i,
-            onSelected: busy ? null : (_) => setState(() => meal = i),
-            showCheckmark: false,
-            backgroundColor: dark ? const Color(0xff242b33) : Colors.white,
-            selectedColor: dark ? const Color(0xff3e4650) : sky,
-            side: BorderSide.none,
-            labelStyle: type(
-              13,
-              color: dark
-                  ? Colors.white
-                  : meal == i
-                  ? cherry
-                  : muted,
+  Widget mealSelector() => Container(
+    padding: const EdgeInsets.all(3),
+    decoration: BoxDecoration(
+      border: Border.all(color: line),
+      borderRadius: BorderRadius.circular(28),
+    ),
+    child: Row(
+      children: [
+        for (var i = 0; i < 3; i++)
+          Expanded(
+            child: Semantics(
+              selected: meal == i,
+              button: true,
+              child: InkWell(
+                onTap: busy ? null : () => setState(() => meal = i),
+                borderRadius: BorderRadius.circular(24),
+                child: Container(
+                  alignment: Alignment.center,
+                  constraints: const BoxConstraints(minHeight: 44),
+                  decoration: BoxDecoration(
+                    color: meal == i ? sky : Colors.transparent,
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  child: Text(
+                    mealNames[i],
+                    style: type(
+                      14,
+                      color: meal == i ? cherry : ink,
+                      weight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ),
             ),
           ),
-        ),
-    ],
+      ],
+    ),
   );
+
   Widget camera() => LayoutBuilder(
     builder: (context, constraints) => SingleChildScrollView(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 8, 24, 28),
-        child: Column(
-          children: [
-            mealSelector(dark: true),
-            const SizedBox(height: 20),
-            Container(
-              height: (constraints.maxHeight * .43).clamp(160.0, 350.0),
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: const Color(0xff303943),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.white12),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(
-                    CupertinoIcons.camera,
-                    size: 45,
-                    color: Colors.white70,
-                  ),
-                  const SizedBox(height: 20),
-                  Text('오늘의 한 끼를 담아주세요.', style: type(16, color: Colors.white)),
-                  const SizedBox(height: 9),
-                  Text(
-                    '아래 촬영 버튼을 누르면 카메라가 열려요.',
-                    style: type(12, color: Colors.white60),
-                  ),
-                ],
-              ),
+      padding: const EdgeInsets.fromLTRB(24, 12, 24, 28),
+      child: Column(
+        children: [
+          mealSelector(),
+          const SizedBox(height: 22),
+          Container(
+            width: double.infinity,
+            height: (constraints.maxHeight * .46).clamp(180.0, 350.0),
+            decoration: BoxDecoration(
+              color: sky.withValues(alpha: .65),
+              borderRadius: BorderRadius.circular(20),
             ),
-            const SizedBox(height: 24),
-            Row(
+            child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(
-                  CupertinoIcons.lock_shield,
-                  size: 15,
-                  color: Color(0xffb6cbdc),
-                ),
-                const SizedBox(width: 7),
+                const Icon(CupertinoIcons.camera, size: 42, color: muted),
+                const SizedBox(height: 20),
                 Text(
-                  '사진첩에는 저장하지 않아요',
-                  style: type(12, color: const Color(0xffcfdeea)),
+                  '오늘의 한 끼를 담아주세요.',
+                  style: type(17, weight: FontWeight.w500),
                 ),
+                const SizedBox(height: 8),
+                Text('잘 차리지 않아도 괜찮아요.', style: type(13, color: muted)),
               ],
             ),
-            const SizedBox(height: 8),
-            Text('우리 식탁에만 남는 한 끼', style: type(11, color: Colors.white54)),
-            const SizedBox(height: 28),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                IconButton(
-                  tooltip: '기존 사진 고르기',
-                  onPressed: busy ? null : () => pick(ImageSource.gallery),
-                  icon: const Icon(
-                    CupertinoIcons.photo,
-                    color: Colors.white70,
-                    size: 26,
+          ),
+          const SizedBox(height: 24),
+          PrimaryButton(
+            '식사 사진 촬영',
+            onPressed: () => pick(ImageSource.camera),
+            busy: busy,
+            icon: CupertinoIcons.camera,
+          ),
+          const SizedBox(height: 8),
+          TextButton.icon(
+            onPressed: busy ? null : () => pick(ImageSource.gallery),
+            icon: const Icon(CupertinoIcons.photo, size: 18),
+            label: const Text('기존 사진 고르기'),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(CupertinoIcons.lock_shield, size: 14, color: muted),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text('사진첩에는 저장하지 않아요', style: type(12, color: muted)),
+              ),
+            ],
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Future<void> changePhoto() => showAppSheet(
+    context,
+    title: '사진 바꾸기',
+    child: Column(
+      children: [
+        ListTile(
+          leading: const Icon(CupertinoIcons.camera),
+          title: const Text('다시 촬영하기'),
+          onTap: () {
+            Navigator.pop(context);
+            pick(ImageSource.camera);
+          },
+        ),
+        ListTile(
+          leading: const Icon(CupertinoIcons.photo),
+          title: const Text('사진에서 고르기'),
+          onTap: () {
+            Navigator.pop(context);
+            pick(ImageSource.gallery);
+          },
+        ),
+      ],
+    ),
+  );
+
+  Widget compose() => SingleChildScrollView(
+    keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AspectRatio(
+          aspectRatio: 1.25,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Image.file(photo!, fit: BoxFit.cover),
+              Positioned(
+                right: 16,
+                bottom: 16,
+                child: TextButton.icon(
+                  onPressed: busy ? null : changePhoto,
+                  style: TextButton.styleFrom(
+                    backgroundColor: milk,
+                    foregroundColor: ink,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
+                  icon: const Icon(CupertinoIcons.photo, size: 17),
+                  label: Text('사진 바꾸기', style: type(12)),
                 ),
-                Semantics(
-                  label: '식사 사진 촬영',
-                  button: true,
-                  child: GestureDetector(
-                    onTap: busy ? null : () => pick(ImageSource.camera),
-                    child: Container(
-                      width: 75,
-                      height: 75,
-                      padding: const EdgeInsets.all(5),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 2),
-                      ),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 18, 24, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              mealSelector(),
+              const SizedBox(height: 26),
+              Text('오늘의 한마디', style: type(13, color: muted)),
+              const SizedBox(height: 9),
+              TextField(
+                controller: caption,
+                maxLength: 80,
+                minLines: 2,
+                maxLines: 4,
+                style: type(14),
+                decoration: const InputDecoration(hintText: '오늘은 뭐가 제일 맛있었어?'),
+              ),
+              const SizedBox(height: 18),
+              Text('함께 볼 식탁', style: type(13, color: muted)),
+              const SizedBox(height: 8),
+              for (final table in widget.store.tables)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Semantics(
+                    selected: recipients.contains(table.id),
+                    button: true,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(14),
+                      onTap: busy
+                          ? null
+                          : () => setState(() {
+                              if (recipients.contains(table.id)) {
+                                recipients.remove(table.id);
+                              } else {
+                                recipients.removeWhere(
+                                  (id) =>
+                                      id.startsWith('local-') == table.isCloud,
+                                );
+                                if (recipients.length < 5)
+                                  recipients.add(table.id);
+                                else
+                                  toast(context, '한 번에 식탁 5개까지 선택할 수 있어요.');
+                              }
+                            }),
                       child: Container(
-                        decoration: const BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
                         ),
-                        child: busy
-                            ? const Padding(
-                                padding: EdgeInsets.all(20),
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : null,
+                        decoration: BoxDecoration(
+                          border: Border.all(color: line),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(child: Text(table.name, style: type(14))),
+                            Icon(
+                              recipients.contains(table.id)
+                                  ? CupertinoIcons.checkmark_alt_circle_fill
+                                  : CupertinoIcons.circle,
+                              size: 23,
+                              color: recipients.contains(table.id)
+                                  ? cherry
+                                  : line,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(width: 48),
-              ],
-            ),
-            const SizedBox(height: 26),
-            Text(
-              '잘 차리지 않아도 괜찮아.\n네가 잘 먹고 있으면 됐어.',
-              textAlign: TextAlign.center,
-              style: type(12, color: Colors.white60, height: 1.9),
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
-  Widget compose() => SingleChildScrollView(
-    padding: EdgeInsets.fromLTRB(
-      24,
-      8,
-      24,
-      24 + MediaQuery.viewInsetsOf(context).bottom,
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(14),
-          child: AspectRatio(
-            aspectRatio: 1.25,
-            child: Image.file(photo!, fit: BoxFit.cover),
-          ),
-        ),
-        const SizedBox(height: 18),
-        mealSelector(),
-        const SizedBox(height: 16),
-        Text('한마디도 같이 보낼까?', style: type(14, weight: FontWeight.w500)),
-        const SizedBox(height: 10),
-        TextField(
-          controller: caption,
-          maxLength: 80,
-          minLines: 2,
-          maxLines: 4,
-          decoration: const InputDecoration(
-            hintText: '오늘은 뭐가 제일 맛있었어?',
-            helperText: '한마디는 선택이에요.',
-          ),
-        ),
-        const SizedBox(height: 19),
-        Text('어느 식탁에 올릴까요?', style: type(14, weight: FontWeight.w500)),
-        const SizedBox(height: 9),
-        Wrap(
-          spacing: 8,
-          runSpacing: 4,
-          children: [
-            for (final table in widget.store.tables)
-              FilterChip(
-                selected: recipients.contains(table.id),
-                showCheckmark: true,
-                label: Text('${table.name}${table.isCloud ? '' : ' · 이 기기'}'),
-                labelStyle: type(
-                  12,
-                  color: recipients.contains(table.id) ? cherry : muted,
-                ),
-                selectedColor: const Color(0xfffbedf1),
-                backgroundColor: soft,
-                side: BorderSide.none,
-                onSelected: busy
-                    ? null
-                    : (selected) => setState(() {
-                        // Keep delivery atomic across destinations with the same storage type.
-                        if (selected) {
-                          recipients.removeWhere(
-                            (id) => id.startsWith('local-') == table.isCloud,
-                          );
-                          recipients.add(table.id);
-                        } else {
-                          recipients.remove(table.id);
-                        }
-                      }),
+              const SizedBox(height: 18),
+              PrimaryButton(
+                '식탁에 남기기',
+                onPressed: recipients.isEmpty ? null : save,
+                busy: busy,
               ),
-          ],
-        ),
-        const SizedBox(height: 22),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(CupertinoIcons.lock_shield, size: 14, color: muted),
-            const SizedBox(width: 6),
-            Text('사진첩에는 저장되지 않아요', style: type(11, color: muted)),
-          ],
-        ),
-        const SizedBox(height: 14),
-        PrimaryButton(
-          recipients.any((id) => !id.startsWith('local-'))
-              ? '${recipients.length}개의 식탁에 보내기'
-              : '내 식탁에 한 끼 남기기',
-          onPressed: recipients.isEmpty ? null : save,
-          busy: busy,
-        ),
-        Center(
-          child: TextButton(
-            onPressed: busy ? null : () => setState(() => photo = null),
-            child: Text('다시 찍을래', style: type(12, color: muted)),
+              const SizedBox(height: 12),
+              Center(
+                child: Text('선택한 식탁에만 나눠요.', style: type(11, color: muted)),
+              ),
+            ],
           ),
         ),
       ],
     ),
   );
+
   Widget successView() => SingleChildScrollView(
     padding: const EdgeInsets.fromLTRB(28, 48, 28, 28),
     child: Column(

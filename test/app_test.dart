@@ -9,6 +9,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:mwomeogeo/main.dart';
 import 'package:mwomeogeo/compose.dart';
 import 'package:mwomeogeo/store.dart';
+import 'package:mwomeogeo/models.dart';
+import 'package:mwomeogeo/post_card.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -23,6 +25,15 @@ void main() {
     final font = FontLoader('Pretendard')
       ..addFont(rootBundle.load('assets/fonts/PretendardVariable.ttf'));
     await font.load();
+    for (final entry in {
+      'MaterialIcons': 'fonts/MaterialIcons-Regular.otf',
+      'packages/cupertino_icons/CupertinoIcons':
+          'packages/cupertino_icons/assets/CupertinoIcons.ttf',
+    }.entries) {
+      await (FontLoader(
+        entry.key,
+      )..addFont(rootBundle.load(entry.value))).load();
+    }
   });
   tearDown(() async {
     store.dispose();
@@ -33,6 +44,19 @@ void main() {
     GlobalKey key,
     String name,
   ) async {
+    await tester.runAsync(() async {
+      await Future.wait([
+        for (final name in ['toast', 'bowl', 'pasta', 'salad'])
+          precacheImage(
+            AssetImage('assets/photos/$name.jpg'),
+            key.currentContext!,
+          ),
+        precacheImage(
+          const AssetImage('assets/illustrations/first-table.png'),
+          key.currentContext!,
+        ),
+      ]);
+    });
     await tester.pumpAndSettle();
     await tester.runAsync(() async {
       final boundary =
@@ -49,13 +73,24 @@ void main() {
   testWidgets('new users create their own first room before writing', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     await store.setDemo(false);
-    await tester.pumpWidget(MwomeogeoApp(store: store));
+    final firstKey = GlobalKey();
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: firstKey,
+        child: MwomeogeoApp(store: store),
+      ),
+    );
     await tester.pumpAndSettle();
-    expect(find.text('아직 함께하는 식탁이 없어요.'), findsOneWidget);
+    await screenshot(tester, firstKey, '06-first-room');
+    expect(find.text('우리의 첫 식탁을\n만들어요'), findsOneWidget);
     expect(find.text('우리 둘'), findsNothing);
     expect(find.text('가족 식탁'), findsNothing);
-    await tester.tap(find.text('식탁 만들기'));
+    await tester.tap(find.text('첫 식탁 만들기'));
     await tester.pumpAndSettle();
     await tester.enterText(find.widgetWithText(TextField, '새 식탁 이름'), '첫 식탁');
     await tester.pump();
@@ -80,8 +115,8 @@ void main() {
       );
       expect(find.text('아직 남긴 $meal 사진이 없어요.'), findsOneWidget);
     }
-    await tester.ensureVisible(find.text('저녁 남기기'));
-    await tester.tap(find.text('저녁 남기기'));
+    await tester.ensureVisible(find.bySemanticsLabel('저녁 남기기'));
+    await tester.tap(find.bySemanticsLabel('저녁 남기기'));
     await tester.pumpAndSettle();
     expect(
       tester.widget<CaptureScreen>(find.byType(CaptureScreen)).initialMeal,
@@ -104,7 +139,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.text('오늘도 잘 먹고 있어?'), findsOneWidget);
+      expect(find.text('오늘도, 잘 먹었어?'), findsOneWidget);
       expect(find.text('지우'), findsWidgets);
       expect(tester.takeException(), isNull);
       await screenshot(tester, key, '01-feed');
@@ -118,13 +153,13 @@ void main() {
         300,
         scrollable: find.byType(Scrollable).first,
       );
-      expect(find.text('저녁 남기기'), findsOneWidget);
-      await tester.tap(find.text('모아보기'));
+      expect(find.bySemanticsLabel('저녁 남기기'), findsOneWidget);
+      await tester.tap(find.text('기록'));
       await tester.pumpAndSettle();
       expect(find.text('우리의 하루.'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await screenshot(tester, key, '02-calendar');
-      await tester.tap(find.text('우리 식탁'));
+      await tester.tap(find.text('식탁'));
       await store.setDemo(false);
       await store.createLocalTable('우리 식탁');
       await tester.pumpAndSettle();
@@ -138,11 +173,138 @@ void main() {
       }
       expect(tester.takeException(), isNull);
       await screenshot(tester, key, '03-empty');
-      await tester.tap(find.text('한 끼 남기기'));
+      await tester.tap(find.text('남기기'));
       await tester.pumpAndSettle();
       expect(find.text('사진첩에는 저장하지 않아요'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await screenshot(tester, key, '04-camera');
+    },
+  );
+  testWidgets(
+    'same meal uses two columns, odd rows and narrow-screen fallback',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await store.setDemo(false);
+      await store.createLocalTable('우리 식탁');
+      for (var i = 0; i < 3; i++) {
+        store.localPosts.add(
+          MealPost(
+            id: 'pair-$i',
+            author: ['지우', '채은', '엄마'][i],
+            authorId: 'local',
+            photo: 'asset:${i == 1 ? 'bowl' : 'toast'}',
+            meal: 0,
+            date: DateTime.now(),
+            tableIds: [store.tableId],
+            caption: '아침도 든든하게 $i',
+          ),
+        );
+      }
+      final key = GlobalKey();
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: key,
+          child: MwomeogeoApp(store: store),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final ordered = store.postsOn(DateTime.now());
+      final first = find.byKey(ValueKey('post-${ordered[0].id}'));
+      final second = find.byKey(ValueKey('post-${ordered[1].id}'));
+      final third = find.byKey(ValueKey('post-${ordered[2].id}'));
+      expect(tester.getTopLeft(first).dy, tester.getTopLeft(second).dy);
+      expect(
+        tester.getTopLeft(second).dx,
+        greaterThan(tester.getTopLeft(first).dx),
+      );
+      expect(
+        tester.getTopLeft(third).dy,
+        greaterThan(tester.getTopLeft(first).dy),
+      );
+      expect(tester.widget<PostCard>(first).tile, isTrue);
+      expect(tester.takeException(), isNull);
+      await screenshot(tester, key, '07-paired-meals');
+      await tester.tap(find.bySemanticsLabel('아침 사진 크게 보기').first);
+      await tester.pumpAndSettle();
+      expect(find.text('아침의 기록'), findsOneWidget);
+      await tester.tap(find.byTooltip('닫기'));
+      await tester.pumpAndSettle();
+      tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      await tester.pumpAndSettle();
+      expect(tester.widget<PostCard>(first).tile, isFalse);
+      tester.platformDispatcher.clearTextScaleFactorTestValue();
+      tester.view.physicalSize = const Size(320, 568);
+      await tester.pumpAndSettle();
+      expect(tester.widget<PostCard>(first).tile, isFalse);
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
+    'compose preserves caption, photo and recipient when dismissing keyboard',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await store.setDemo(false);
+      await store.createLocalTable('우리 식탁');
+      final source = File('${directory.path}/picked.jpg');
+      await tester.runAsync(() async {
+        await source.writeAsBytes(
+          (await rootBundle.load('assets/photos/bowl.jpg')).buffer
+              .asUint8List(),
+        );
+      });
+      const picker = MethodChannel('plugins.flutter.io/image_picker');
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        picker,
+        (_) async => source.path,
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          picker,
+          null,
+        ),
+      );
+      final key = GlobalKey();
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: key,
+          child: MwomeogeoApp(store: store),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('남기기'));
+      await tester.pumpAndSettle();
+      await tester.runAsync(
+        () => precacheImage(FileImage(source), key.currentContext!),
+      );
+      await tester.tap(find.text('기존 사진 고르기'));
+      await tester.pumpAndSettle();
+      expect(find.text('사진 바꾸기'), findsOneWidget);
+      await tester.enterText(find.byType(TextField), '바쁜 날에도 든든하게 한 그릇.');
+      await tester.pump();
+      await tester.tap(find.text('오늘의 한마디'));
+      await tester.pumpAndSettle();
+      expect(tester.testTextInput.isVisible, isFalse);
+      expect(find.text('바쁜 날에도 든든하게 한 그릇.'), findsOneWidget);
+      expect(find.text('우리 식탁'), findsOneWidget);
+      await screenshot(tester, key, '08-compose');
+      await tester.ensureVisible(find.text('식탁에 남기기'));
+      await tester.runAsync(() async {
+        await tester.tap(find.text('식탁에 남기기'));
+        for (var i = 0; i < 100 && store.localPosts.isEmpty; i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        }
+      });
+      await tester.pumpAndSettle();
+      expect(store.localPosts.single.caption, '바쁜 날에도 든든하게 한 그릇.');
+      expect(find.text('안부로 놓아두었어요.'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     },
   );
   testWidgets('small display and large text retain usable navigation', (
@@ -152,19 +314,19 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+    tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final key = GlobalKey();
     await tester.pumpWidget(
-      MediaQuery(
-        data: const MediaQueryData(
-          size: Size(320, 568),
-          devicePixelRatio: 1,
-          textScaler: TextScaler.linear(1.3),
-        ),
+      RepaintBoundary(
+        key: key,
         child: MwomeogeoApp(store: store),
       ),
     );
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    await tester.tap(find.text('한 끼 남기기'));
+    await screenshot(tester, key, '05-small-text');
+    await tester.tap(find.text('남기기'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });

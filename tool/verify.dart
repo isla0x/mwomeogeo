@@ -179,12 +179,12 @@ Future<void> main() async {
 
     await mount(const Size(390, 844));
     await shot('01-feed');
-    await tap('모아보기');
+    await tap('기록');
     await shot('02-calendar');
-    await tap('우리 식탁');
+    await tap('식탁');
     await reloaded.setDemo(false);
     await shot('03-empty');
-    await tap('한 끼 남기기');
+    await tap('남기기');
     await shot('04-camera');
     // Reset the navigation tree before checking a smaller, text-scaled display.
     runApp(const SizedBox.shrink());

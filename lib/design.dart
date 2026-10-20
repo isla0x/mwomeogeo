@@ -6,12 +6,13 @@ import 'package:flutter/material.dart';
 import 'models.dart';
 import 'store.dart';
 
-const cherry = Color(0xffbf3954);
-const ink = Color(0xff242b33);
-const muted = Color(0xff647380);
-const sky = Color(0xffeaf2f9);
-const line = Color(0xffe5ebef);
-const soft = Color(0xfff0f6fb);
+const milk = Color(0xfffaf9f6);
+const cherry = Color(0xffa63d4e);
+const ink = Color(0xff272420);
+const muted = Color(0xff687580);
+const sky = Color(0xffeaf1f5);
+const line = Color(0xffe3e5e5);
+const soft = Color(0xfff3f4f3);
 const mealIcons = [
   CupertinoIcons.sunrise,
   CupertinoIcons.sun_max,
@@ -37,12 +38,12 @@ class PrimaryButton extends StatelessWidget {
     super.key,
     required this.onPressed,
     this.busy = false,
-    this.icon = CupertinoIcons.chevron_right,
+    this.icon,
   });
   final String label;
   final VoidCallback? onPressed;
   final bool busy;
-  final IconData icon;
+  final IconData? icon;
   @override
   Widget build(BuildContext context) => FilledButton(
     onPressed: busy ? null : onPressed,
@@ -50,7 +51,7 @@ class PrimaryButton extends StatelessWidget {
       backgroundColor: cherry,
       disabledBackgroundColor: line,
       foregroundColor: Colors.white,
-      minimumSize: const Size(double.infinity, 52),
+      minimumSize: const Size(double.infinity, 54),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     ),
     child: busy
@@ -71,8 +72,10 @@ class PrimaryButton extends StatelessWidget {
                   style: type(14, color: Colors.white, weight: FontWeight.w500),
                 ),
               ),
-              const SizedBox(width: 10),
-              Icon(icon, size: 16),
+              if (icon != null) ...[
+                const SizedBox(width: 10),
+                Icon(icon, size: 16),
+              ],
             ],
           ),
   );
@@ -236,7 +239,7 @@ Future<T?> showAppSheet<T>(
   context: context,
   isScrollControlled: true,
   useSafeArea: true,
-  backgroundColor: Colors.white,
+  backgroundColor: milk,
   showDragHandle: true,
   shape: const RoundedRectangleBorder(
     borderRadius: BorderRadius.vertical(top: Radius.circular(24)),

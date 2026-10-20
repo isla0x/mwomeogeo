@@ -39,6 +39,11 @@ Future<void> openSettings(BuildContext context, MealStore store) =>
               ],
             ),
             const SizedBox(height: 24),
+            TextButton.icon(
+              onPressed: () => notifications(sheetContext, store),
+              icon: const Icon(CupertinoIcons.bell, size: 18),
+              label: const Text('식탁 소식'),
+            ),
             settingRow('사진첩에 자동 저장', '저장 안 함'),
             settingRow('현재 식탁', store.table?.name ?? '없음'),
             if (store.table != null)
@@ -71,7 +76,7 @@ Future<void> openSettings(BuildContext context, MealStore store) =>
             const SizedBox(height: 18),
             Center(
               child: Text(
-                '뭐먹어?  1.0.0 · CHERRY SKY',
+                '뭐먹어?  1.0.0 · CHERRY MILK',
                 style: type(10, color: muted, spacing: 1),
               ),
             ),
