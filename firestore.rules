@@ -1,0 +1,57 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {return request.auth != null;}
+    function member(tableId) {
+      return signedIn() && request.auth.uid in get(/databases/$(database)/documents/tables/$(tableId)).data.memberIds;
+    }
+    function text(value,max) {return value is string && value.size()>0 && value.size()<=max;}
+    function activePost(tableId,postId) {
+      let path=/databases/$(database)/documents/tables/$(tableId)/posts/$(postId);
+      return exists(path) && get(path).data.get('deleting',false)==false;
+    }
+    match /tables/{tableId} {
+      allow read: if signedIn() && request.auth.uid in resource.data.memberIds;
+      allow write: if false;
+      match /posts/{postId} {
+        allow read: if member(tableId);
+        allow create: if member(tableId)
+          && request.resource.data.keys().hasAll(['authorId','authorName','photoPath','meal','caption','createdAt','updatedAt'])
+          && request.resource.data.keys().hasOnly(['authorId','authorName','photoPath','meal','caption','createdAt','updatedAt'])
+          && request.resource.data.authorId==request.auth.uid
+          && text(request.resource.data.authorName,12)
+          && request.resource.data.meal is int && request.resource.data.meal>=0 && request.resource.data.meal<=2
+          && request.resource.data.caption is string && request.resource.data.caption.size()<=80
+          && request.resource.data.photoPath in ['tables/'+tableId+'/photos/'+postId+'/image.jpg','tables/'+tableId+'/photos/'+postId+'/image.png']
+          && request.resource.data.createdAt==request.time
+          && request.resource.data.updatedAt==request.time;
+        allow update: if member(tableId) && resource.data.get('deleting',false)==false
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['updatedAt'])
+          && request.resource.data.updatedAt==request.time;
+        allow delete: if false;
+        match /comments/{commentId} {
+          allow read: if member(tableId) && activePost(tableId,postId);
+          allow create: if member(tableId) && activePost(tableId,postId)
+            && request.resource.data.keys().hasAll(['authorId','authorName','body','createdAt'])
+            && request.resource.data.keys().hasOnly(['authorId','authorName','body','createdAt'])
+            && request.resource.data.authorId==request.auth.uid
+            && text(request.resource.data.authorName,12) && text(request.resource.data.body,80)
+            && request.resource.data.createdAt==request.time;
+          allow update,delete: if false;
+        }
+        match /reactions/{reactionId} {
+          allow read: if member(tableId) && activePost(tableId,postId);
+          allow create: if member(tableId) && activePost(tableId,postId)
+            && request.resource.data.keys().hasAll(['userId','kind'])
+            && request.resource.data.keys().hasOnly(['userId','kind'])
+            && request.resource.data.userId==request.auth.uid
+            && request.resource.data.kind in ['heart','yum']
+            && reactionId==request.auth.uid+'_'+request.resource.data.kind;
+          allow delete: if member(tableId) && activePost(tableId,postId) && resource.data.userId==request.auth.uid;
+          allow update: if false;
+        }
+      }
+    }
+    match /{document=**} {allow read,write: if false;}
+  }
+}

@@ -1,0 +1,19 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function member(tableId) {
+      return request.auth != null && request.auth.uid in firestore.get(/databases/(default)/documents/tables/$(tableId)).data.memberIds;
+    }
+    match /tables/{tableId}/photos/{postId}/{fileName} {
+      allow get: if member(tableId)
+        && firestore.exists(/databases/(default)/documents/tables/$(tableId)/posts/$(postId))
+        && firestore.get(/databases/(default)/documents/tables/$(tableId)/posts/$(postId)).data.photoPath=='tables/'+tableId+'/photos/'+postId+'/'+fileName;
+      allow create: if member(tableId) && fileName in ['image.jpg','image.png']
+        && request.resource.size>0 && request.resource.size<=10*1024*1024
+        && request.resource.contentType in ['image/jpeg','image/png']
+        && request.resource.metadata.authorId==request.auth.uid;
+      allow update,delete,list: if false;
+    }
+    match /{allPaths=**} {allow read,write: if false;}
+  }
+}
