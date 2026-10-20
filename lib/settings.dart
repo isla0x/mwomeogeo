@@ -7,87 +7,78 @@ import 'design.dart';
 import 'models.dart';
 import 'store.dart';
 
-Future<void> openSettings(
-  BuildContext context,
-  MealStore store,
-) => showAppSheet(
-  context,
-  title: '나의 작은 식탁',
-  child: ListenableBuilder(
-    listenable: store,
-    builder: (sheetContext, _) => Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
+Future<void> openSettings(BuildContext context, MealStore store) =>
+    showAppSheet(
+      context,
+      title: '나의 작은 식탁',
+      child: ListenableBuilder(
+        listenable: store,
+        builder: (sheetContext, _) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Avatar(store.name, size: 46),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(store.name, style: type(19, weight: FontWeight.w500)),
-                  Text('오늘도 잘 챙겨 먹는 중', style: type(12, color: muted)),
-                ],
+            Row(
+              children: [
+                Avatar(store.name, size: 46),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        store.name,
+                        style: type(19, weight: FontWeight.w500),
+                      ),
+                      Text('오늘도 잘 챙겨 먹는 중', style: type(12, color: muted)),
+                    ],
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => editName(sheetContext, store),
+                  child: const Text('이름 변경'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            settingRow('사진첩에 자동 저장', '저장 안 함'),
+            settingRow('현재 식탁', store.table?.name ?? '없음'),
+            if (store.table != null)
+              settingRow(
+                '기록 보관',
+                store.table!.isCloud ? '초대한 사람끼리만' : '이 기기 안에 보관',
+              ),
+            if (store.cloud.signedIn) settingRow('함께 쓰는 식탁', '이 기기와 연결됨'),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Text(
+                '앱에서 찍은 사진은 내 사진첩에 쌓이지 않아요.\n앱을 삭제하면 이 기기에만 보관한 기록도 사라져요.',
+                style: type(12, color: muted, height: 1.9),
               ),
             ),
-            TextButton(
-              onPressed: () => editName(sheetContext, store),
-              child: const Text('이름 변경'),
+            const SizedBox(height: 18),
+            PrimaryButton(
+              '함께 쓰는 식탁 관리',
+              onPressed: () {
+                Navigator.pop(sheetContext);
+                openTables(context, store);
+              },
+              icon: CupertinoIcons.person_2,
+            ),
+            const SizedBox(height: 18),
+            Text(
+              '회원가입 없이 이 기기에서 이어 써요. 기기를 바꾸거나 앱 데이터를 초기화하면 새로 초대받아야 할 수 있어요.',
+              style: type(11, color: muted, height: 1.8),
+            ),
+            const SizedBox(height: 18),
+            Center(
+              child: Text(
+                '뭐먹어?  1.0.0 · CHERRY SKY',
+                style: type(10, color: muted, spacing: 1),
+              ),
             ),
           ],
         ),
-        const SizedBox(height: 24),
-        settingRow('사진첩에 자동 저장', '저장 안 함'),
-        settingRow('현재 식탁', store.table.name),
-        settingRow('기록 보관', store.table.isCloud ? '초대한 사람끼리만' : '이 기기 안에 보관'),
-        if (store.cloud.signedIn) settingRow('함께 쓰는 식탁', '이 기기와 연결됨'),
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          child: Text(
-            '앱에서 찍은 사진은 내 사진첩에 쌓이지 않아요.\n앱을 삭제하면 이 기기에만 보관한 기록도 사라져요.',
-            style: type(12, color: muted, height: 1.9),
-          ),
-        ),
-        SwitchListTile.adaptive(
-          contentPadding: EdgeInsets.zero,
-          title: Text('디자인 미리보기', style: type(14)),
-          subtitle: Text('예시 식탁과 사진을 함께 표시해요.', style: type(11, color: muted)),
-          value: store.demo,
-          activeTrackColor: cherry,
-          onChanged: (value) async {
-            try {
-              await store.setDemo(value);
-            } catch (_) {
-              if (context.mounted) toast(context, '설정을 저장하지 못했어요.');
-            }
-          },
-        ),
-        const SizedBox(height: 18),
-        PrimaryButton(
-          '함께 쓰는 식탁 관리',
-          onPressed: () {
-            Navigator.pop(sheetContext);
-            openTables(context, store);
-          },
-          icon: CupertinoIcons.person_2,
-        ),
-        const SizedBox(height: 18),
-        Text(
-          '회원가입 없이 이 기기에서 이어 써요. 기기를 바꾸거나 앱 데이터를 초기화하면 새로 초대받아야 할 수 있어요.',
-          style: type(11, color: muted, height: 1.8),
-        ),
-        const SizedBox(height: 18),
-        Center(
-          child: Text(
-            '뭐먹어?  1.0.0 · CHERRY SKY',
-            style: type(10, color: muted, spacing: 1),
-          ),
-        ),
-      ],
-    ),
-  ),
-);
+      ),
+    );
 Widget settingRow(String label, String value) => Container(
   padding: const EdgeInsets.symmetric(vertical: 16),
   decoration: const BoxDecoration(
@@ -191,29 +182,6 @@ Future<void> notifications(BuildContext context, MealStore store) async {
 }
 
 Future<void> openTables(BuildContext context, MealStore store) async {
-  if (!store.cloud.configured) {
-    await showAppSheet(
-      context,
-      title: '함께 쓰는 식탁',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            CloudApi.initializationError ?? '함께 쓰는 기능은 아직 연결 전이에요.',
-            style: type(17, weight: FontWeight.w500),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            '지금은 이 기기에 한 끼를 보관하거나, 기록 메뉴에서 사진과 한마디를 공유할 수 있어요.\n\n식탁이 연결되면 이름과 초대 코드만으로 가까운 사람끼리 같은 밥상을 볼 수 있어요.',
-            style: type(14, color: muted, height: 1.9),
-          ),
-          const SizedBox(height: 22),
-          PrimaryButton('내 식탁 계속 쓰기', onPressed: () => Navigator.pop(context)),
-        ],
-      ),
-    );
-    return;
-  }
   await showAppSheet(
     context,
     title: '함께 쓰는 식탁',
@@ -241,6 +209,7 @@ class _TablesState extends State<_Tables> {
   }
 
   Future<void> connect() async {
+    if (!widget.store.cloud.configured) return;
     setState(() => busy = true);
     try {
       await widget.store.connect();
@@ -271,6 +240,13 @@ class _TablesState extends State<_Tables> {
       error = null;
     });
     try {
+      if (!widget.store.cloud.configured) {
+        if (!create) throw StateError('함께 쓰려면 Firebase 연결이 필요해요.');
+        await widget.store.setName(nickname.text.trim());
+        await widget.store.createLocalTable(value);
+        if (mounted) Navigator.pop(context);
+        return;
+      }
       await widget.store.cloud.ensureIdentity(nickname.text.trim());
       await widget.store.setName(nickname.text.trim());
       final id = create
@@ -283,6 +259,7 @@ class _TablesState extends State<_Tables> {
         name.clear();
         code.clear();
         toast(context, create ? '함께 쓸 식탁을 만들었어요.' : '식탁에 함께 앉았어요.');
+        Navigator.pop(context);
       }
     } catch (e) {
       if (mounted) setState(() => error = '$e');
@@ -297,7 +274,12 @@ class _TablesState extends State<_Tables> {
     builder: (context, _) => Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('회원가입 없이, 이름과 초대 코드만으로.', style: type(13, color: muted)),
+        Text(
+          widget.store.cloud.configured
+              ? '회원가입 없이, 이름과 초대 코드만으로.'
+              : '이 기기에 보관할 식탁을 만들어요. 함께 공유하려면 Firebase 연결이 필요해요.',
+          style: type(13, color: muted),
+        ),
         const SizedBox(height: 18),
         TextField(
           controller: nickname,
@@ -313,6 +295,15 @@ class _TablesState extends State<_Tables> {
           ),
           const SizedBox(height: 12),
         ],
+        for (final table in widget.store.localTables)
+          ListTile(
+            title: Text(table.name),
+            subtitle: const Text('이 기기에 보관'),
+            onTap: () {
+              widget.store.selectTable(table.id);
+              Navigator.pop(context);
+            },
+          ),
         for (final table in widget.store.remoteTables)
           Container(
             margin: const EdgeInsets.only(bottom: 12),
@@ -385,22 +376,26 @@ class _TablesState extends State<_Tables> {
           busy: busy,
           icon: CupertinoIcons.plus,
         ),
-        const SizedBox(height: 25),
-        TextField(
-          controller: code,
-          maxLength: 12,
-          textCapitalization: TextCapitalization.characters,
-          decoration: const InputDecoration(labelText: '받은 초대 코드'),
-        ),
-        const SizedBox(height: 8),
-        PrimaryButton(
-          '초대 코드로 함께하기',
-          onPressed: () => perform(false),
-          busy: busy,
-        ),
+        if (widget.store.cloud.configured) ...[
+          const SizedBox(height: 25),
+          TextField(
+            controller: code,
+            maxLength: 12,
+            textCapitalization: TextCapitalization.characters,
+            decoration: const InputDecoration(labelText: '받은 초대 코드'),
+          ),
+          const SizedBox(height: 8),
+          PrimaryButton(
+            '초대 코드로 함께하기',
+            onPressed: () => perform(false),
+            busy: busy,
+          ),
+        ],
         const SizedBox(height: 16),
         Text(
-          '함께 쓰는 사진과 반응은 식탁을 보고 있을 때 자동으로 갱신돼요.',
+          widget.store.cloud.configured
+              ? '함께 쓰는 사진과 반응은 식탁을 보고 있을 때 자동으로 갱신돼요.'
+              : CloudApi.initializationError ?? '사진은 이 기기의 앱 안에 보관돼요.',
           style: type(11, color: muted),
         ),
       ],

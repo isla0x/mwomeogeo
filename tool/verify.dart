@@ -29,6 +29,14 @@ Future<void> main() async {
     final dir = await Directory.systemTemp.createTemp('mwomeogeo-verify-');
     final store = MealStore(await SharedPreferences.getInstance(), dir);
     await store.load();
+    check(
+      store.tables.isEmpty && store.table == null && !store.demo,
+      'Fresh installs must start with zero rooms and no sample data',
+    );
+    await store.createLocalTable('우리 둘');
+    final couple = store.tableId;
+    await store.createLocalTable('가족 식탁');
+    final family = store.tableId;
     final source = File('${dir.path}/camera.jpg');
     await source.writeAsBytes([1, 2, 3, 4]);
     await store.setName('채은');
@@ -36,7 +44,7 @@ Future<void> main() async {
       source: source,
       meal: 1,
       caption: '한 끼의 안부',
-      tableIds: ['local-couple', 'local-family'],
+      tableIds: [couple, family],
     );
     await source.delete();
     final post = store.localPosts.single;
@@ -62,7 +70,7 @@ Future<void> main() async {
       restarted.localPosts.single.comments.single.text == '잘 챙겨 먹어!',
       'Comments must persist',
     );
-    restarted.selectTable('local-family');
+    restarted.selectTable(family);
     check(
       restarted.postsOn(DateTime.now()).length == 1,
       'Cross-post must be visible in both local tables',
@@ -90,7 +98,11 @@ Future<void> main() async {
       ..addFont(rootBundle.load('assets/fonts/PretendardVariable.ttf'));
     await font.load();
     final key = GlobalKey();
-    Future<void> mount(Size size, {double scale = 1}) async {
+    Future<void> mount(
+      Size size, {
+      double scale = 1,
+      MealStore? displayedStore,
+    }) async {
       runApp(
         Align(
           alignment: Alignment.topLeft,
@@ -111,7 +123,7 @@ Future<void> main() async {
                     devicePixelRatio: 1,
                     textScaler: TextScaler.linear(scale),
                   ),
-                  child: MwomeogeoApp(store: reloaded),
+                  child: MwomeogeoApp(store: displayedStore ?? reloaded),
                 ),
               ),
             ),
@@ -180,11 +192,24 @@ Future<void> main() async {
     await reloaded.setDemo(true);
     await mount(const Size(320, 568), scale: 1.3);
     await shot('05-small-text');
+    runApp(const SizedBox.shrink());
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    SharedPreferences.setMockInitialValues({'demo': true});
+    final fresh = MealStore(await SharedPreferences.getInstance(), dir);
+    await fresh.load();
+    check(
+      fresh.tables.isEmpty && !fresh.demo,
+      'Old preview setting must not create rooms',
+    );
+    await mount(const Size(390, 844), displayedStore: fresh);
+    await shot('06-first-room');
     check(errors.isEmpty, 'Rendering errors: ${errors.join('; ')}');
     stdout.writeln(
       jsonEncode({
         'status': 'passed',
         'checks': [
+          'zero initial rooms',
+          'explicit room creation and restoration',
           'photo isolation',
           'restart persistence',
           'cross-post',
@@ -193,6 +218,8 @@ Future<void> main() async {
           'date filtering',
           'deletion',
           'preview state',
+          'all meals in one feed',
+          'first room screen',
           'feed render',
           'calendar render',
           'empty render',

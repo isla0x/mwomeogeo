@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:mwomeogeo/main.dart';
+import 'package:mwomeogeo/compose.dart';
 import 'package:mwomeogeo/store.dart';
 
 void main() {
@@ -18,6 +19,7 @@ void main() {
     directory = await Directory.systemTemp.createTemp('mwomeogeo-ui-');
     store = MealStore(await SharedPreferences.getInstance(), directory);
     await store.load();
+    await store.setDemo(true);
     final font = FontLoader('Pretendard')
       ..addFont(rootBundle.load('assets/fonts/PretendardVariable.ttf'));
     await font.load();
@@ -32,16 +34,52 @@ void main() {
     String name,
   ) async {
     await tester.pumpAndSettle();
-    final boundary =
-        key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
-    final image = await boundary.toImage(pixelRatio: 2);
-    final data = await image.toByteData(format: ui.ImageByteFormat.png);
-    await Directory('build/previews').create(recursive: true);
-    await File('build/previews/$name.png')
-        .writeAsBytes(data!.buffer.asUint8List());
-    image.dispose();
+    await tester.runAsync(() async {
+      final boundary =
+          key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+      final image = await boundary.toImage(pixelRatio: 2);
+      final data = await image.toByteData(format: ui.ImageByteFormat.png);
+      await Directory('build/previews').create(recursive: true);
+      await File('build/previews/$name.png')
+          .writeAsBytes(data!.buffer.asUint8List());
+      image.dispose();
+    });
   }
 
+  testWidgets('new users create their own first room before writing', (
+    tester,
+  ) async {
+    await store.setDemo(false);
+    await tester.pumpWidget(MwomeogeoApp(store: store));
+    await tester.pumpAndSettle();
+    expect(find.text('아직 함께하는 식탁이 없어요.'), findsOneWidget);
+    expect(find.text('우리 둘'), findsNothing);
+    expect(find.text('가족 식탁'), findsNothing);
+    await tester.tap(find.text('식탁 만들기'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, '새 식탁 이름'), '첫 식탁');
+    await tester.ensureVisible(find.text('식탁 만들기').last);
+    await tester.tap(find.text('식탁 만들기').last);
+    await tester.pumpAndSettle();
+    expect(store.tables.single.name, '첫 식탁');
+    expect(find.text('첫 식탁'), findsOneWidget);
+    for (final meal in ['아침', '점심', '저녁']) {
+      await tester.scrollUntilVisible(
+        find.text('아직 남긴 $meal 사진이 없어요.'),
+        150,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('아직 남긴 $meal 사진이 없어요.'), findsOneWidget);
+    }
+    await tester.ensureVisible(find.text('저녁 남기기'));
+    await tester.tap(find.text('저녁 남기기'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<CaptureScreen>(find.byType(CaptureScreen)).initialMeal,
+      2,
+    );
+    expect(tester.takeException(), isNull);
+  });
   testWidgets(
     'reference feed, calendar and empty state render at native iPhone size',
     (tester) async {
@@ -58,9 +96,20 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('오늘도 잘 먹고 있어?'), findsOneWidget);
-      expect(find.text('지우'), findsOneWidget);
+      expect(find.text('지우'), findsWidgets);
       expect(tester.takeException(), isNull);
       await screenshot(tester, key, '01-feed');
+      await tester.scrollUntilVisible(
+        find.text('오늘은 조금 가볍게. 너도 잘 챙겨 먹어.'),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.scrollUntilVisible(
+        find.text('아직 남긴 저녁 사진이 없어요.'),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('저녁 남기기'), findsOneWidget);
       await tester.tap(find.text('모아보기'));
       await tester.pumpAndSettle();
       expect(find.text('우리의 하루.'), findsOneWidget);
@@ -68,8 +117,16 @@ void main() {
       await screenshot(tester, key, '02-calendar');
       await tester.tap(find.text('우리 식탁'));
       await store.setDemo(false);
+      await store.createLocalTable('우리 식탁');
       await tester.pumpAndSettle();
-      expect(find.text('점심 식탁은\n아직 비어 있어요.'), findsOneWidget);
+      for (final meal in ['아침', '점심', '저녁']) {
+        await tester.scrollUntilVisible(
+          find.text('아직 남긴 $meal 사진이 없어요.'),
+          150,
+          scrollable: find.byType(Scrollable).first,
+        );
+        expect(find.text('아직 남긴 $meal 사진이 없어요.'), findsOneWidget);
+      }
       expect(tester.takeException(), isNull);
       await screenshot(tester, key, '03-empty');
       await tester.tap(find.text('한 끼 남기기'));
@@ -88,7 +145,11 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
       MediaQuery(
-        data: const MediaQueryData(textScaler: TextScaler.linear(1.3)),
+        data: const MediaQueryData(
+          size: Size(320, 568),
+          devicePixelRatio: 1,
+          textScaler: TextScaler.linear(1.3),
+        ),
         child: MwomeogeoApp(store: store),
       ),
     );

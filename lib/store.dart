@@ -22,23 +22,25 @@ class MealStore extends ChangeNotifier {
   List<MealPost> localPosts = [];
   List<MealPost> remotePosts = [];
   List<DiningTable> remoteTables = [];
-  bool demo = true;
+  bool demo = false;
   String name = '나';
-  String tableId = 'local-couple';
-  static const localTables = [
+  String tableId = '';
+  List<DiningTable> localTables = [];
+  static const previewTables = [
     DiningTable('local-couple', '우리 둘'),
     DiningTable('local-family', '가족 식탁'),
   ];
-  List<DiningTable> get tables => [...localTables, ...remoteTables];
-  DiningTable get table => tables.firstWhere(
-    (g) => g.id == tableId,
-    orElse: () => localTables.first,
-  );
-  List<MealPost> get allPosts => [
-    ...localPosts,
-    ...remotePosts,
-    if (demo) ...previewPosts,
-  ];
+  List<DiningTable> get tables =>
+      demo ? previewTables : [...localTables, ...remoteTables];
+  DiningTable? get table {
+    for (final candidate in tables) {
+      if (candidate.id == tableId) return candidate;
+    }
+    return tables.isEmpty ? null : tables.first;
+  }
+
+  List<MealPost> get allPosts =>
+      demo ? previewPosts : [...localPosts, ...remotePosts];
   List<MealPost> postsOn(DateTime date, {int? meal}) =>
       allPosts
           .where(
@@ -50,15 +52,60 @@ class MealStore extends ChangeNotifier {
           .toList()
         ..sort((a, b) => b.date.compareTo(a.date));
   Future<void> load() async {
-    demo = preferences.getBool('demo') ?? true;
+    // Preview is opt-in for this session, including after upgrading old installs.
+    demo = false;
     name = preferences.getString('name') ?? '나';
-    tableId = preferences.getString('selectedTable') ?? 'local-couple';
+    tableId = preferences.getString('selectedTable') ?? '';
+    final savedTables = preferences.getString('localTables');
+    if (savedTables != null) {
+      localTables = (jsonDecode(savedTables) as List)
+          .map(
+            (item) => DiningTable(item['id'] as String, item['name'] as String),
+          )
+          .toList();
+    }
     final raw = preferences.getString('posts');
     if (raw != null) {
       localPosts = (jsonDecode(raw) as List)
           .map((j) => MealPost.fromJson(j))
           .toList();
     }
+    final recordedIds = localPosts.expand((post) => post.tableIds).toSet();
+    for (final legacy in previewTables) {
+      if (recordedIds.contains(legacy.id) &&
+          !localTables.any((table) => table.id == legacy.id)) {
+        localTables.add(legacy);
+      }
+    }
+    _reconcileSelection();
+  }
+
+  Future<void> createLocalTable(String value) async {
+    final name = value.trim();
+    if (name.isEmpty || name.length > 20) {
+      throw ArgumentError('식탁 이름을 1~20자로 적어 주세요.');
+    }
+    final table = DiningTable('local-${newId()}', name);
+    final updated = [...localTables, table];
+    final ok = await preferences.setString(
+      'localTables',
+      jsonEncode([
+        for (final table in updated) {'id': table.id, 'name': table.name},
+      ]),
+    );
+    if (!ok) throw const FileSystemException('식탁을 저장하지 못했어요.');
+    localTables = updated;
+    demo = false;
+    selectTable(table.id);
+  }
+
+  void _reconcileSelection() {
+    if (!tables.any((table) => table.id == tableId)) {
+      final savedId = preferences.getString('selectedTable');
+      tableId = tables.isEmpty ? '' : tables.first.id;
+      if (tables.any((table) => table.id == savedId)) tableId = savedId!;
+    }
+    _watchSelectedTable();
   }
 
   Future<void> _save() async {
@@ -70,8 +117,11 @@ class MealStore extends ChangeNotifier {
   }
 
   Future<void> setDemo(bool value) async {
-    await preferences.setBool('demo', value);
     demo = value;
+    tableId = value
+        ? previewTables.first.id
+        : preferences.getString('selectedTable') ?? '';
+    _reconcileSelection();
     notifyListeners();
   }
 
@@ -83,8 +133,9 @@ class MealStore extends ChangeNotifier {
   }
 
   void selectTable(String id) {
+    if (!tables.any((table) => table.id == id)) return;
     tableId = id;
-    unawaited(preferences.setString('selectedTable', id));
+    if (!demo) unawaited(preferences.setString('selectedTable', id));
     _watchSelectedTable();
     notifyListeners();
   }
@@ -98,6 +149,7 @@ class MealStore extends ChangeNotifier {
     }
     remoteTables = tables;
     remotePosts = loaded;
+    _reconcileSelection();
     syncError = null;
     _watchSelectedTable();
     notifyListeners();
@@ -109,7 +161,11 @@ class MealStore extends ChangeNotifier {
     required String caption,
     required List<String> tableIds,
   }) async {
-    if (tableIds.isEmpty) throw ArgumentError('식탁을 선택해 주세요.');
+    if (demo ||
+        tableIds.isEmpty ||
+        tableIds.any((id) => !tables.any((table) => table.id == id))) {
+      throw ArgumentError('먼저 식탁을 만들거나 초대 코드로 참여해 주세요.');
+    }
     final local = tableIds.where((id) => id.startsWith('local-')).toList();
     final remote = tableIds.where((id) => !id.startsWith('local-')).toList();
     // Mixed local and remote destinations are disabled in the composer so a
@@ -243,19 +299,12 @@ class MealStore extends ChangeNotifier {
       name = cloud.displayName!;
     }
     await refresh();
-    if (preferences.getString('selectedTable') == null &&
-        remoteTables.isNotEmpty) {
-      selectTable(remoteTables.first.id);
-      await setDemo(false);
-    }
     await _tablesSubscription?.cancel();
     _tablesSubscription = cloud.watchTables().listen((tables) {
       remoteTables = tables;
       final allowed = tables.map((t) => t.id).toSet();
       remotePosts.removeWhere((post) => !post.tableIds.any(allowed.contains));
-      if (!tableId.startsWith('local-') && !allowed.contains(tableId)) {
-        selectTable(localTables.first.id);
-      }
+      _reconcileSelection();
       syncError = null;
       _watchSelectedTable();
       notifyListeners();
@@ -267,7 +316,12 @@ class MealStore extends ChangeNotifier {
     if (_watchedTable == tableId) return;
     unawaited(_postsSubscription?.cancel());
     _watchedTable = tableId;
-    if (!cloud.signedIn || tableId.startsWith('local-')) return;
+    if (demo ||
+        tableId.isEmpty ||
+        !cloud.signedIn ||
+        tableId.startsWith('local-')) {
+      return;
+    }
     final selected = tableId;
     _postsSubscription = cloud.watchPosts(selected).listen((posts) {
       if (selected != tableId) return;

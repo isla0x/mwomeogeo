@@ -110,7 +110,6 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   MealStore get s => widget.store;
-  int meal = 1;
   int page = 0;
   DateTime now = DateTime.now();
   DateTime month = DateTime(DateTime.now().year, DateTime.now().month);
@@ -154,16 +153,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> capture() async {
+  Future<void> capture({int? initialMeal}) async {
+    if (s.demo) await s.setDemo(false);
+    if (!mounted) return;
+    if (s.table == null) {
+      await openTables(context, s);
+      return;
+    }
+    final hour = DateTime.now().hour;
+    final suggestedMeal = hour < 11 ? 0 : (hour < 17 ? 1 : 2);
     final selected = await Navigator.push<int>(
       context,
       MaterialPageRoute(
-        builder: (_) => CaptureScreen(store: s, initialMeal: meal),
+        builder: (_) =>
+            CaptureScreen(store: s, initialMeal: initialMeal ?? suggestedMeal),
       ),
     );
     if (selected != null && mounted) {
       setState(() {
-        meal = selected;
         page = 0;
         now = DateTime.now();
       });
@@ -186,7 +193,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 physics: const AlwaysScrollableScrollPhysics(),
                 slivers: [
                   SliverToBoxAdapter(child: header()),
-                  if (page == 0) ...feed() else ...calendar(),
+                  if (s.table == null)
+                    SliverToBoxAdapter(child: emptyTables())
+                  else if (page == 0)
+                    ...feed()
+                  else
+                    ...calendar(),
                   SliverToBoxAdapter(
                     child: SizedBox(
                       height: 116 + MediaQuery.paddingOf(context).bottom,
@@ -313,8 +325,44 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       ],
     ),
   );
+  Widget emptyTables() => Padding(
+    padding: const EdgeInsets.fromLTRB(24, 60, 24, 24),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '아직 함께하는 식탁이 없어요.',
+          style: type(25, weight: FontWeight.w500, height: 1.4),
+        ),
+        const SizedBox(height: 14),
+        Text(
+          '식탁 0개 · 가까운 사람들과 첫 식탁을 만들어 보세요.\n이미 초대받았다면 코드로 참여할 수 있어요.',
+          style: type(13, color: muted, height: 1.8),
+        ),
+        const SizedBox(height: 28),
+        PrimaryButton(
+          '식탁 만들기',
+          onPressed: () => openTables(context, s),
+          icon: CupertinoIcons.plus,
+        ),
+        const SizedBox(height: 10),
+        TextButton(
+          onPressed: () => openTables(context, s),
+          child: const Text('초대 코드로 참여'),
+        ),
+        if (s.syncError != null) ...[
+          const SizedBox(height: 18),
+          Text(s.syncError!, style: type(12, color: cherry)),
+        ],
+      ],
+    ),
+  );
   List<Widget> feed() {
-    final posts = s.postsOn(now, meal: meal);
+    final posts = s.postsOn(now);
+    final meals = [
+      for (var i = 0; i < 3; i++)
+        posts.where((post) => post.meal == i).toList(),
+    ];
     return [
       SliverToBoxAdapter(
         child: Column(
@@ -335,7 +383,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '${dayLabel(now)}  ─  ${mealNames[meal]}의 기록',
+                    '${dayLabel(now)}  ─  하루의 기록',
                     style: type(11, color: muted),
                   ),
                   const SizedBox(height: 12),
@@ -356,73 +404,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 ],
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Container(
-                decoration: const BoxDecoration(
-                  border: Border(bottom: BorderSide(color: line)),
-                ),
-                child: Row(
-                  children: [
-                    for (var i = 0; i < 3; i++)
-                      Expanded(
-                        child: Semantics(
-                          selected: meal == i,
-                          child: InkWell(
-                            onTap: () => setState(() => meal = i),
-                            child: Container(
-                              padding: const EdgeInsets.fromLTRB(0, 9, 0, 14),
-                              decoration: BoxDecoration(
-                                border: Border(
-                                  bottom: BorderSide(
-                                    color: meal == i
-                                        ? cherry
-                                        : Colors.transparent,
-                                    width: 1.5,
-                                  ),
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: i == 0
-                                    ? MainAxisAlignment.start
-                                    : i == 1
-                                    ? MainAxisAlignment.center
-                                    : MainAxisAlignment.end,
-                                children: [
-                                  Icon(
-                                    mealIcons[i],
-                                    size: 17,
-                                    color: meal == i ? cherry : muted,
-                                  ),
-                                  const SizedBox(width: 7),
-                                  Text(
-                                    mealNames[i],
-                                    style: type(
-                                      13,
-                                      color: meal == i ? cherry : muted,
-                                      weight: meal == i
-                                          ? FontWeight.w500
-                                          : FontWeight.w400,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 7),
-                                  Text(
-                                    '${s.postsOn(now, meal: i).length}',
-                                    style: type(
-                                      10,
-                                      color: meal == i ? cherry : muted,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
             if (s.demo)
               Padding(
                 padding: const EdgeInsets.fromLTRB(24, 12, 20, 0),
@@ -437,7 +418,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   ],
                 ),
               ),
-            if (!s.demo && !s.table.isCloud)
+            if (!s.demo && s.table?.isCloud == false)
               Padding(
                 padding: const EdgeInsets.fromLTRB(24, 14, 24, 0),
                 child: Text(
@@ -449,16 +430,41 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ],
         ),
       ),
-      if (posts.isEmpty)
-        SliverToBoxAdapter(child: emptyMeal())
-      else
-        SliverList.builder(
-          itemCount: posts.length,
-          itemBuilder: (context, index) => Padding(
-            padding: const EdgeInsets.fromLTRB(24, 0, 24, 18),
-            child: PostCard(post: posts[index], store: s),
+      for (var i = 0; i < 3; i++) ...[
+        SliverToBoxAdapter(
+          child: Padding(
+            key: ValueKey('meal-section-$i'),
+            padding: const EdgeInsets.fromLTRB(24, 12, 24, 8),
+            child: Row(
+              children: [
+                Icon(mealIcons[i], size: 18, color: cherry),
+                const SizedBox(width: 8),
+                Text(mealNames[i], style: type(15, weight: FontWeight.w500)),
+                const SizedBox(width: 8),
+                Text('${meals[i].length}', style: type(11, color: muted)),
+                const Spacer(),
+                TextButton(
+                  onPressed: () => capture(initialMeal: i),
+                  child: Text(
+                    '${mealNames[i]} 남기기',
+                    style: type(11, color: cherry),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
+        if (meals[i].isEmpty)
+          SliverToBoxAdapter(child: emptyMeal(i))
+        else
+          SliverList.builder(
+            itemCount: meals[i].length,
+            itemBuilder: (context, index) => Padding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 18),
+              child: PostCard(post: meals[i][index], store: s),
+            ),
+          ),
+      ],
       if (posts.isNotEmpty)
         SliverToBoxAdapter(
           child: Padding(
@@ -479,7 +485,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            '내 ${mealNames[meal]}도 놓아둘까요?',
+                            '오늘의 한 끼도 놓아둘까요?',
                             style: type(
                               13,
                               color: const Color(0xff4f687c),
@@ -508,43 +514,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     ];
   }
 
-  Widget emptyMeal() => Padding(
-    padding: const EdgeInsets.fromLTRB(30, 44, 30, 25),
-    child: Column(
-      children: [
-        Container(
-          width: 100,
-          height: 100,
-          decoration: BoxDecoration(
-            color: soft,
-            shape: BoxShape.circle,
-            border: Border.all(color: line),
-          ),
-          child: Icon(
-            mealIcons[meal],
-            size: 34,
-            color: const Color(0xff8ba2b4),
-          ),
-        ),
-        const SizedBox(height: 24),
-        Text(
-          '${mealNames[meal]} 식탁은\n아직 비어 있어요.',
-          style: type(23, weight: FontWeight.w500, height: 1.5),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 12),
-        Text(
-          '오늘도 잘 챙겨 먹었다고,\n한 끼 사진으로 안부를 남겨보세요.',
-          style: type(13, color: muted, height: 1.8),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 25),
-        PrimaryButton(
-          '첫 ${mealNames[meal]} 남기기',
-          onPressed: capture,
-          icon: CupertinoIcons.camera,
-        ),
-      ],
+  Widget emptyMeal(int meal) => Padding(
+    padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+    child: Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+      decoration: BoxDecoration(
+        color: soft,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        '아직 남긴 ${mealNames[meal]} 사진이 없어요.',
+        style: type(12, color: muted),
+      ),
     ),
   );
   Widget navigation() => Container(

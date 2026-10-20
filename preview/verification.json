@@ -4,8 +4,13 @@
   "dart": "3.13.5",
   "static_analysis": "passed: no issues found",
   "dart_kernel_compile": "passed",
-  "standalone_engine_verification": "passed",
+  "standalone_engine_verification": "passed: 17 checks",
   "checks": [
+    "zero initial rooms",
+    "explicit room creation and restoration",
+    "legacy records preserved without unused starter rooms",
+    "all meals in one scrolling feed",
+    "meal-specific capture",
     "photo isolation",
     "restart persistence",
     "cross-post",
@@ -13,19 +18,19 @@
     "comments",
     "date filtering",
     "deletion",
-    "preview state",
     "feed render",
     "calendar render",
     "empty render",
     "capture render",
     "small display with large text"
   ],
-  "normal_flutter_test": "blocked: local socket creation denied",
+  "normal_flutter_test": "passed: 10 tests",
   "native_ios_build": "blocked: SwiftPM cache writes and CoreSimulator access denied",
   "physical_iphone_camera": "not tested",
   "live_firebase_integration": "not tested: server deployment and two-device verification pending",
   "firebase_rules_emulator": "not tested",
   "callable_handler_authorization": "passed: 8 in-memory checks against actual handler code",
   "ios_config_import": "passed: wrong bundle rejected and valid fixture generated",
-  "firebase_app_configuration": "iOS config applied for project mwomeogeo and bundle com.chaen.mwomeogeo"
+  "firebase_app_configuration": "iOS config applied for project mwomeogeo and bundle com.chaen.mwomeogeo",
+  "app_version": "1.0.0+3"
 }
