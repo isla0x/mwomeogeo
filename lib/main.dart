@@ -73,6 +73,21 @@ class MwomeogeoApp extends StatelessWidget {
       colorScheme: ColorScheme.fromSeed(seedColor: cherry, surface: milk),
       textTheme: TextTheme(bodyMedium: type(14), bodyLarge: type(16)),
       dividerColor: line,
+      dialogTheme: const DialogThemeData(
+        backgroundColor: milk,
+        surfaceTintColor: Colors.transparent,
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: milk,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        surfaceTintColor: Colors.transparent,
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(foregroundColor: cherry),
+      ),
       dividerTheme: const DividerThemeData(color: line, thickness: 1),
       appBarTheme: const AppBarTheme(
         backgroundColor: milk,
@@ -80,7 +95,14 @@ class MwomeogeoApp extends StatelessWidget {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: Colors.transparent,
+        fillColor: Colors.white,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 17,
+        ),
+        floatingLabelStyle: type(13, color: cherry),
+        labelStyle: type(13, color: muted),
+        hintStyle: type(13, color: muted),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
           borderSide: const BorderSide(color: line),
@@ -335,7 +357,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         PrimaryButton('첫 식탁 만들기', onPressed: () => openTables(context, s)),
         const SizedBox(height: 8),
         TextButton(
-          onPressed: () => openTables(context, s),
+          onPressed: () => openTables(context, s, join: true),
           child: Text('초대 코드로 참여하기', style: type(14, color: cherry)),
         ),
         const SizedBox(height: 14),

@@ -294,6 +294,13 @@ void main() {
       expect(find.text('바쁜 날에도 든든하게 한 그릇.'), findsOneWidget);
       expect(find.text('우리 식탁'), findsOneWidget);
       await screenshot(tester, key, '08-compose');
+      await tester.tap(find.text('사진 바꾸기'));
+      await tester.pumpAndSettle();
+      await screenshot(tester, key, '11-photo-options');
+      await tester.tap(find.byTooltip('닫기'));
+      await tester.pumpAndSettle();
+      expect(find.text('바쁜 날에도 든든하게 한 그릇.'), findsOneWidget);
+
       await tester.ensureVisible(find.text('식탁에 남기기'));
       await tester.runAsync(() async {
         await tester.tap(find.text('식탁에 남기기'));
@@ -307,6 +314,118 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+  testWidgets('record actions cancel safely and deletion needs confirmation', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await store.setDemo(false);
+    await store.setName('채은');
+    await store.createLocalTable('우리 둘');
+    final post = MealPost(
+      id: 'menu-record',
+      author: '채은',
+      authorId: 'local',
+      photo: 'asset:bowl',
+      meal: 0,
+      date: DateTime.now(),
+      tableIds: [store.tableId],
+      caption: '바쁜 날에도 든든하게 한 그릇.',
+    );
+    store.localPosts.add(post);
+    final key = GlobalKey();
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: key,
+        child: MwomeogeoApp(store: store),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('기록 메뉴').first);
+    await tester.pumpAndSettle();
+    expect(find.text('사진과 한마디 공유'), findsOneWidget);
+    await screenshot(tester, key, '09-record-menu');
+    await tester.tap(find.text('기록 삭제'));
+    await tester.pumpAndSettle();
+    expect(find.text('이 기록을 삭제할까요?'), findsOneWidget);
+    await screenshot(tester, key, '10-delete-dialog');
+    await tester.tap(find.text('취소'));
+    await tester.pumpAndSettle();
+    expect(store.localPosts, hasLength(1));
+    await tester.tap(find.byTooltip('기록 메뉴').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('기록 삭제'));
+    await tester.pumpAndSettle();
+    await tester.runAsync(() async {
+      await tester.tap(find.text('삭제'));
+      for (var i = 0; i < 100 && store.localPosts.isNotEmpty; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      // Finish local persistence and the notifyListeners callback.
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+    await tester.pumpAndSettle();
+    expect(store.localPosts, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('name sheet rejects blank names and fits a visible keyboard', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await store.setName('채은');
+    final key = GlobalKey();
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: key,
+        child: MwomeogeoApp(store: store),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('내 정보와 식탁 관리'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('이름 변경'));
+    await tester.pumpAndSettle();
+    tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+    addTearDown(tester.view.resetViewInsets);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, '   ');
+    await tester.pump();
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, '저장'))
+          .onPressed,
+      isNull,
+    );
+    await tester.enterText(find.byType(TextField).last, '채은');
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    tester.view.resetViewInsets();
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pumpAndSettle();
+    await screenshot(tester, key, '12-name-sheet');
+    tester.view.physicalSize = const Size(320, 568);
+    tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    tester.view.viewInsets = const FakeViewPadding(bottom: 250);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.enterText(find.byType(TextField).last, '윤채은');
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('저장'));
+    await tester.tap(find.text('저장'));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+    await tester.pumpAndSettle();
+    expect(store.name, '윤채은');
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('small display and large text retain usable navigation', (
     tester,
   ) async {

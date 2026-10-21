@@ -98,30 +98,36 @@ Widget settingRow(String label, String value) => Container(
 );
 Future<void> editName(BuildContext context, MealStore store) async {
   final controller = TextEditingController(text: store.name);
-  final value = await showDialog<String>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('어떻게 불러드릴까요?'),
-      content: TextField(
-        controller: controller,
-        maxLength: 12,
-        autofocus: true,
-        decoration: const InputDecoration(labelText: '식탁에서 쓸 이름'),
+  final value = await showAppSheet<String>(
+    context,
+    title: '어떻게 불러드릴까요?',
+    subtitle: '가까운 사람들이 알아볼 이름이면 좋아요.',
+    child: Builder(
+      builder: (context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: controller,
+            maxLength: 12,
+            autofocus: true,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (text) {
+              if (text.trim().isNotEmpty) Navigator.pop(context, text.trim());
+            },
+            decoration: const InputDecoration(labelText: '식탁에서 쓸 이름'),
+          ),
+          const SizedBox(height: 14),
+          ValueListenableBuilder<TextEditingValue>(
+            valueListenable: controller,
+            builder: (_, value, _) => PrimaryButton(
+              '저장',
+              onPressed: value.text.trim().isEmpty
+                  ? null
+                  : () => Navigator.pop(context, value.text.trim()),
+            ),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('취소'),
-        ),
-        TextButton(
-          onPressed: () {
-            if (controller.text.trim().isNotEmpty) {
-              Navigator.pop(context, controller.text.trim());
-            }
-          },
-          child: const Text('저장'),
-        ),
-      ],
     ),
   );
   if (value != null) {
@@ -186,17 +192,22 @@ Future<void> notifications(BuildContext context, MealStore store) async {
   );
 }
 
-Future<void> openTables(BuildContext context, MealStore store) async {
+Future<void> openTables(
+  BuildContext context,
+  MealStore store, {
+  bool join = false,
+}) async {
   await showAppSheet(
     context,
     title: '함께 쓰는 식탁',
-    child: _Tables(store: store),
+    child: _Tables(store: store, join: join),
   );
 }
 
 class _Tables extends StatefulWidget {
-  const _Tables({required this.store});
+  const _Tables({required this.store, this.join = false});
   final MealStore store;
+  final bool join;
   @override
   State<_Tables> createState() => _TablesState();
 }
@@ -207,9 +218,11 @@ class _TablesState extends State<_Tables> {
   final code = TextEditingController();
   bool busy = false;
   String? error;
+  bool joining = false;
   @override
   void initState() {
     super.initState();
+    joining = widget.join && widget.store.cloud.configured;
     connect();
   }
 
@@ -301,9 +314,11 @@ class _TablesState extends State<_Tables> {
           const SizedBox(height: 12),
         ],
         for (final table in widget.store.localTables)
-          ListTile(
-            title: Text(table.name),
-            subtitle: const Text('이 기기에 보관'),
+          AppOption(
+            label: table.name,
+            subtitle: '이 기기에 보관',
+            icon: CupertinoIcons.person_2,
+            selected: table.id == widget.store.tableId,
             onTap: () {
               widget.store.selectTable(table.id);
               Navigator.pop(context);
@@ -320,34 +335,23 @@ class _TablesState extends State<_Tables> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        table.name,
-                        style: type(16, weight: FontWeight.w500),
-                      ),
-                    ),
-                    Text(
-                      '${table.memberCount}명',
-                      style: type(12, color: muted),
-                    ),
-                    IconButton(
-                      tooltip: '이 식탁 보기',
-                      onPressed: () {
-                        widget.store.selectTable(table.id);
-                        Navigator.pop(context);
-                      },
-                      icon: const Icon(CupertinoIcons.chevron_right, size: 17),
-                    ),
-                  ],
+                AppOption(
+                  label: table.name,
+                  subtitle: '${table.memberCount}명 · 초대한 사람끼리만',
+                  icon: CupertinoIcons.person_2,
+                  selected: table.id == widget.store.tableId,
+                  onTap: () {
+                    widget.store.selectTable(table.id);
+                    Navigator.pop(context);
+                  },
                 ),
+                Text('초대 코드', style: type(11, color: muted)),
                 Row(
                   children: [
                     Expanded(
                       child: SelectableText(
                         table.inviteCode ?? '',
-                        style: type(17, spacing: 1.5, color: cherry),
+                        style: type(12, spacing: .5, color: cherry),
                       ),
                     ),
                     IconButton(
@@ -366,36 +370,71 @@ class _TablesState extends State<_Tables> {
             ),
           ),
         const SizedBox(height: 12),
-        TextField(
-          controller: name,
-          maxLength: 20,
-          decoration: const InputDecoration(
-            labelText: '새 식탁 이름',
-            hintText: '우리 둘, 가족 식탁…',
-          ),
-        ),
-        const SizedBox(height: 8),
-        PrimaryButton(
-          '식탁 만들기',
-          onPressed: () => perform(true),
-          busy: busy,
-          icon: CupertinoIcons.plus,
-        ),
         if (widget.store.cloud.configured) ...[
-          const SizedBox(height: 25),
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: soft,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Row(
+              children: [
+                for (final join in [false, true])
+                  Expanded(
+                    child: Semantics(
+                      selected: joining == join,
+                      child: TextButton(
+                        onPressed: busy
+                            ? null
+                            : () => setState(() {
+                                joining = join;
+                                error = null;
+                              }),
+                        style: TextButton.styleFrom(
+                          foregroundColor: joining == join ? ink : muted,
+                          backgroundColor: joining == join
+                              ? Colors.white
+                              : Colors.transparent,
+                          minimumSize: const Size(0, 46),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        child: Text(
+                          join ? '초대 코드로 참여' : '새 식탁 만들기',
+                          style: type(12, weight: FontWeight.w500),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+        ],
+        if (!joining)
+          TextField(
+            controller: name,
+            maxLength: 20,
+            decoration: const InputDecoration(
+              labelText: '새 식탁 이름',
+              hintText: '우리 둘, 가족 식탁…',
+            ),
+          )
+        else
           TextField(
             controller: code,
             maxLength: 32,
             textCapitalization: TextCapitalization.characters,
             decoration: const InputDecoration(labelText: '받은 초대 코드'),
           ),
-          const SizedBox(height: 8),
-          PrimaryButton(
-            '초대 코드로 함께하기',
-            onPressed: () => perform(false),
-            busy: busy,
-          ),
-        ],
+        const SizedBox(height: 8),
+        PrimaryButton(
+          joining ? '초대 코드로 함께하기' : '식탁 만들기',
+          onPressed: () => perform(!joining),
+          busy: busy,
+          icon: joining ? CupertinoIcons.person_2 : CupertinoIcons.plus,
+        ),
         const SizedBox(height: 16),
         Text(
           widget.store.cloud.configured

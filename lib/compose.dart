@@ -210,17 +210,19 @@ class _CaptureScreenState extends State<CaptureScreen> {
     title: '사진 바꾸기',
     child: Column(
       children: [
-        ListTile(
-          leading: const Icon(CupertinoIcons.camera),
-          title: const Text('다시 촬영하기'),
+        AppOption(
+          icon: CupertinoIcons.camera,
+          label: '다시 촬영하기',
+          subtitle: '지금 눈앞의 한 끼를 담아요',
           onTap: () {
             Navigator.pop(context);
             pick(ImageSource.camera);
           },
         ),
-        ListTile(
-          leading: const Icon(CupertinoIcons.photo),
-          title: const Text('사진에서 고르기'),
+        AppOption(
+          icon: CupertinoIcons.photo,
+          label: '사진에서 고르기',
+          subtitle: '사진첩에서 한 장을 골라요',
           onTap: () {
             Navigator.pop(context);
             pick(ImageSource.gallery);
@@ -282,55 +284,26 @@ class _CaptureScreenState extends State<CaptureScreen> {
               Text('함께 볼 식탁', style: type(13, color: muted)),
               const SizedBox(height: 8),
               for (final table in widget.store.tables)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Semantics(
-                    selected: recipients.contains(table.id),
-                    button: true,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(14),
-                      onTap: busy
-                          ? null
-                          : () => setState(() {
-                              if (recipients.contains(table.id)) {
-                                recipients.remove(table.id);
-                              } else {
-                                recipients.removeWhere(
-                                  (id) =>
-                                      id.startsWith('local-') == table.isCloud,
-                                );
-                                if (recipients.length < 5)
-                                  recipients.add(table.id);
-                                else
-                                  toast(context, '한 번에 식탁 5개까지 선택할 수 있어요.');
-                              }
-                            }),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 14,
-                        ),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: line),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(child: Text(table.name, style: type(14))),
-                            Icon(
-                              recipients.contains(table.id)
-                                  ? CupertinoIcons.checkmark_alt_circle_fill
-                                  : CupertinoIcons.circle,
-                              size: 23,
-                              color: recipients.contains(table.id)
-                                  ? cherry
-                                  : line,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
+                AppOption(
+                  label: table.name,
+                  icon: CupertinoIcons.person_2,
+                  selected: recipients.contains(table.id),
+                  onTap: busy
+                      ? null
+                      : () => setState(() {
+                          if (recipients.contains(table.id)) {
+                            recipients.remove(table.id);
+                          } else {
+                            recipients.removeWhere(
+                              (id) => id.startsWith('local-') == table.isCloud,
+                            );
+                            if (recipients.length < 5) {
+                              recipients.add(table.id);
+                            } else {
+                              toast(context, '한 번에 식탁 5개까지 선택할 수 있어요.');
+                            }
+                          }
+                        }),
                 ),
               const SizedBox(height: 18),
               PrimaryButton(

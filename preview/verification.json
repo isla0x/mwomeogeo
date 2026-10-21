@@ -1,10 +1,10 @@
 {
   "date": "2026-10-21",
-  "app_version": "1.0.0+6",
+  "app_version": "1.0.0+8",
   "flutter": "3.47.7",
   "dart": "3.13.5",
-  "static_analysis": "passed: 0 diagnostics (analyzer API, lib/ and test/)",
-  "normal_flutter_test": "passed: 14 tests; 5 UI tests rerun after final visual polish",
+  "static_analysis": "passed: flutter analyze --no-pub on 5 changed lib files and test/app_test.dart, 0 diagnostics",
+  "normal_flutter_test": "passed: all 18 tests, including 7 UI tests",
   "checks": [
     "zero initial rooms",
     "first-room illustration",
@@ -20,7 +20,12 @@
     "save completion",
     "calendar navigation",
     "local persistence, reactions, comments and deletion",
-    "128 KiB photo compression"
+    "128 KiB photo compression",
+    "shared modal/action/selection styling",
+    "delete cancellation preserves record; confirmation deletes",
+    "blank nickname save disabled",
+    "nickname save at 320x568, text scale 1.5, keyboard inset 250",
+    "photo selection sheet dismissal preserves draft"
   ],
   "rendered_sizes": [
     "390x844 @2x",
@@ -29,9 +34,9 @@
   "firebase_rules_emulator": "58 checks passed on unchanged Spark rules in prior verification",
   "live_firebase_setup": "Anonymous auth and member-only Spark Firestore rules deployed; no billing account",
   "two_device_sharing": "requires installing updated build on iPhones",
-  "native_ios_build": "not built by agent for this release",
+  "native_ios_build": "not built by agent for build 8",
   "physical_iphone_camera": "not tested for this release",
-  "standalone_engine_verification": "previous build harness updated for new navigation; not rerun for build 6 (Android SDK unavailable for default bundle command)",
+  "standalone_engine_verification": "not rerun for build 8; normal Flutter tests passed",
   "screenshots": "preview/*.png: Flutter-rendered fixture screens; first launch remains empty",
   "selected_asset": "assets/illustrations/first-table.png: isolated from approved mockup using image generation; imported in pubspec and rendered on first-room screen"
 }

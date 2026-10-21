@@ -281,53 +281,263 @@ void toast(BuildContext context, String text) {
     ..hideCurrentSnackBar()
     ..showSnackBar(
       SnackBar(
-        content: Text(text),
+        content: Text(text, style: type(13, color: Colors.white)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        margin: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
         behavior: SnackBarBehavior.floating,
         backgroundColor: ink,
       ),
     );
 }
 
+// All app-owned modal surfaces share the same neutral, untinted shell.
 Future<T?> showAppSheet<T>(
   BuildContext context, {
   required String title,
   required Widget child,
+  String? subtitle,
 }) => showModalBottomSheet<T>(
   context: context,
   isScrollControlled: true,
   useSafeArea: true,
-  backgroundColor: milk,
-  showDragHandle: true,
-  shape: const RoundedRectangleBorder(
-    borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-  ),
-  builder: (context) => Padding(
+  barrierColor: ink.withValues(alpha: .30),
+  backgroundColor: Colors.transparent,
+  elevation: 0,
+  constraints: const BoxConstraints(maxWidth: 544),
+  builder: (context) => AnimatedPadding(
+    duration: const Duration(milliseconds: 180),
+    curve: Curves.easeOutCubic,
     padding: EdgeInsets.fromLTRB(
-      24,
-      0,
-      24,
-      24 + MediaQuery.viewInsetsOf(context).bottom,
+      12,
+      12,
+      12,
+      MediaQuery.viewInsetsOf(context).bottom + 12,
     ),
-    child: SingleChildScrollView(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    child: SafeArea(
+      top: false,
+      child: Material(
+        color: milk,
+        surfaceTintColor: Colors.transparent,
+        borderRadius: BorderRadius.circular(28),
+        clipBehavior: Clip.antiAlias,
+        child: SingleChildScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          padding: const EdgeInsets.fromLTRB(22, 10, 22, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Text(title, style: type(23, weight: FontWeight.w500)),
+              Center(
+                child: Container(
+                  width: 32,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: line,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
               ),
-              IconButton(
-                tooltip: '닫기',
-                onPressed: () => Navigator.pop(context),
-                icon: const Icon(CupertinoIcons.xmark, size: 20),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: Semantics(
+                      header: true,
+                      child: Text(
+                        title,
+                        style: type(21, weight: FontWeight.w600, spacing: -.7),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    tooltip: '닫기',
+                    onPressed: () => Navigator.pop(context),
+                    style: IconButton.styleFrom(
+                      backgroundColor: soft,
+                      minimumSize: const Size(44, 44),
+                    ),
+                    icon: const Icon(
+                      CupertinoIcons.xmark,
+                      size: 15,
+                      color: muted,
+                    ),
+                  ),
+                ],
               ),
+              if (subtitle != null) ...[
+                const SizedBox(height: 4),
+                Text(subtitle, style: type(13, color: muted)),
+              ],
+              const SizedBox(height: 20),
+              child,
             ],
           ),
-          const SizedBox(height: 16),
-          child,
-        ],
+        ),
+      ),
+    ),
+  ),
+);
+
+/// A single accessible row for actions and single/multiple selection.
+class AppOption extends StatelessWidget {
+  const AppOption({
+    super.key,
+    required this.label,
+    required this.icon,
+    required this.onTap,
+    this.subtitle,
+    this.selected,
+    this.destructive = false,
+  });
+  final String label;
+  final String? subtitle;
+  final IconData icon;
+  final VoidCallback? onTap;
+  final bool? selected;
+  final bool destructive;
+  @override
+  Widget build(BuildContext context) {
+    final active = selected == true;
+    final accent = active || destructive;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Semantics(
+        button: true,
+        selected: selected,
+        child: Material(
+          color: active ? const Color(0xfff8eef0) : Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(17),
+            side: BorderSide(
+              color: active ? cherry.withValues(alpha: .38) : line,
+            ),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: accent ? const Color(0xfff5e7ea) : soft,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(icon, size: 20, color: accent ? cherry : muted),
+                  ),
+                  const SizedBox(width: 13),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          label,
+                          style: type(
+                            14,
+                            color: destructive ? cherry : ink,
+                            weight: FontWeight.w500,
+                          ),
+                        ),
+                        if (subtitle != null) ...[
+                          const SizedBox(height: 3),
+                          Text(subtitle!, style: type(11, color: muted)),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Icon(
+                    selected == null
+                        ? CupertinoIcons.chevron_right
+                        : active
+                        ? CupertinoIcons.checkmark_alt_circle_fill
+                        : CupertinoIcons.circle,
+                    size: selected == null ? 13 : 22,
+                    color: active
+                        ? cherry
+                        : selected == null
+                        ? muted
+                        : line,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+Future<bool?> confirmDelete(BuildContext context) => showDialog<bool>(
+  context: context,
+  barrierColor: ink.withValues(alpha: .30),
+  builder: (context) => Dialog(
+    backgroundColor: milk,
+    surfaceTintColor: Colors.transparent,
+    elevation: 0,
+    insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 340),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                color: const Color(0xfff5e7ea),
+                borderRadius: BorderRadius.circular(15),
+              ),
+              child: const Icon(CupertinoIcons.trash, color: cherry, size: 22),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              '이 기록을 삭제할까요?',
+              style: type(20, weight: FontWeight.w600, spacing: -.7),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              '식사 사진과 댓글이 함께 사라져요.\n삭제한 기록은 되돌릴 수 없어요.',
+              style: type(13, color: muted, height: 1.7),
+            ),
+            const SizedBox(height: 26),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: ink,
+                      side: const BorderSide(color: line),
+                      minimumSize: const Size(0, 52),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: Text('취소', style: type(14, weight: FontWeight.w500)),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: PrimaryButton(
+                    '삭제',
+                    onPressed: () => Navigator.pop(context, true),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     ),
   ),

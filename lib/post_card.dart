@@ -45,7 +45,6 @@ class _PostCardState extends State<PostCard> {
   Widget build(BuildContext context) {
     final user = p.isCloud ? s.cloud.userId : 'local';
     final liked = p.reactions.contains('$user:heart');
-    final hungry = p.reactions.contains('$user:yum');
     final likes = p.reactions.where((r) => r.endsWith(':heart')).length;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -71,33 +70,10 @@ class _PostCardState extends State<PostCard> {
             ),
             if (!widget.tile)
               Text(timeLabel(p.date), style: type(10, color: muted)),
-            PopupMenuButton<String>(
+            IconButton(
               tooltip: '기록 메뉴',
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
               icon: const Icon(CupertinoIcons.ellipsis, size: 18, color: muted),
-              onSelected: (value) {
-                if (value == 'share') {
-                  sharePhoto();
-                } else if (value == 'yum') {
-                  react('yum');
-                } else {
-                  deletePost();
-                }
-              },
-              itemBuilder: (_) => [
-                PopupMenuItem(
-                  value: 'yum',
-                  child: Text(hungry ? '한 입만 취소' : '한 입만'),
-                ),
-                if (!p.isDemo)
-                  const PopupMenuItem(
-                    value: 'share',
-                    child: Text('사진과 한마디 공유'),
-                  ),
-                if (!p.isDemo && (!p.isCloud || p.authorId == s.cloud.userId))
-                  const PopupMenuItem(value: 'delete', child: Text('기록 삭제')),
-              ],
+              onPressed: busy ? null : openMenu,
             ),
           ],
         ),
@@ -190,6 +166,52 @@ class _PostCardState extends State<PostCard> {
     ),
   );
 
+  Future<void> openMenu() async {
+    final user = p.isCloud ? s.cloud.userId : 'local';
+    final hungry = p.reactions.contains('$user:yum');
+    final action = await showAppSheet<String>(
+      context,
+      title: '한 끼의 기록',
+      subtitle: '${p.author} · ${mealNames[p.meal]} · ${timeLabel(p.date)}',
+      child: Column(
+        children: [
+          AppOption(
+            label: hungry ? '한 입만 취소' : '한 입만',
+            subtitle: '맛있어 보이는 한 끼에 마음을 남겨요',
+            icon: CupertinoIcons.heart,
+            onTap: () => Navigator.pop(context, 'yum'),
+          ),
+          if (!p.isDemo)
+            AppOption(
+              label: '사진과 한마디 공유',
+              subtitle: '소중한 한 끼를 다른 곳에도 전해요',
+              icon: CupertinoIcons.square_arrow_up,
+              onTap: () => Navigator.pop(context, 'share'),
+            ),
+          if (!p.isDemo && (!p.isCloud || p.authorId == s.cloud.userId)) ...[
+            const SizedBox(height: 6),
+            AppOption(
+              label: '기록 삭제',
+              subtitle: '사진과 댓글을 함께 지워요',
+              icon: CupertinoIcons.trash,
+              destructive: true,
+              onTap: () => Navigator.pop(context, 'delete'),
+            ),
+          ],
+        ],
+      ),
+    );
+    if (!mounted) return;
+    switch (action) {
+      case 'yum':
+        await react('yum');
+      case 'share':
+        await sharePhoto();
+      case 'delete':
+        await deletePost();
+    }
+  }
+
   Future<void> sharePhoto() async {
     try {
       File file;
@@ -218,23 +240,7 @@ class _PostCardState extends State<PostCard> {
   }
 
   Future<void> deletePost() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('이 기록을 삭제할까요?'),
-        content: const Text('삭제한 식사 기록과 댓글은 복구할 수 없어요.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('취소'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('삭제', style: TextStyle(color: cherry)),
-          ),
-        ],
-      ),
-    );
+    final confirmed = await confirmDelete(context);
     if (confirmed != true) return;
     try {
       await s.delete(p);
