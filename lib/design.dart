@@ -26,7 +26,7 @@ TextStyle type(
   double spacing = -.3,
   double height = 1.5,
 }) => TextStyle(
-  fontSize: size,
+  fontSize: size <= 16 ? size + 1 : size,
   color: color,
   fontWeight: weight,
   letterSpacing: spacing,
