@@ -34,7 +34,7 @@ Xcode에서 Runner 타깃 → Signing & Capabilities → Team을 본인 Apple De
 cd ~/Documents/mwomeogeo
 git pull --ff-only
 flutter pub get
-flutter build ipa
+flutter build ipa --build-number=10
 open build/ios/archive/Runner.xcarchive
 ```
 
@@ -82,7 +82,7 @@ python3 tool/configure_ios_firebase.py /파일경로/GoogleService-Info.plist
 
 기존 빌드 3은 Functions·Storage를 사용하는 버전이므로 **최신 빌드로 업데이트해야 합니다.** 앱을 열 때마다 빌드하는 것은 아닙니다. 서버 설정 변경만으로 앱 재빌드가 필요한 것은 아니지만, 이번에는 앱의 저장 방식을 바꾸었으므로 한 번 업데이트합니다.
 
-식사 알림 기능은 `feature/meal-nudges` 브랜치에서 준비 중입니다. Apple 푸시 키와 Workers 서버 연결이 끝나기 전에는 실제 알림을 보내지 않습니다. 배포/빌드/두 기기 확인 절차는 [server/nudges/README.md](server/nudges/README.md)에 있습니다. 이 브랜치의 빌드 번호는 10입니다.
+빌드 10은 끼니 옆 종 버튼으로 같은 식탁에서 알림을 켠 상대에게 밥 안부를 보냅니다. Apple production 푸시 키와 무료 Workers 서버를 연결했고 앱에 운영 주소를 기본 설정했습니다. **내 정보 → 식사 알림 받기**를 켜야 받을 수 있습니다. 새 iPhone 빌드를 설치한 뒤 두 기기에서 실제 수신을 확인해야 합니다. 서버 검증과 확인 절차는 [server/nudges/README.md](server/nudges/README.md)에 있습니다.
 
 빌드 9는 본문·버튼·댓글·작은 안내 글씨를 1pt씩 키웁니다. 16pt 이하의 공통 글꼴 크기에만 적용하고 제목 크기는 유지합니다.
 

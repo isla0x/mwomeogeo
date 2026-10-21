@@ -10,7 +10,10 @@ import 'cloud.dart';
 import 'models.dart';
 
 // Public HTTPS address only. Apple signing keys stay in the server's secrets.
-const nudgeApiUrl = String.fromEnvironment('NUDGE_API_URL');
+const nudgeApiUrl = String.fromEnvironment(
+  'NUDGE_API_URL',
+  defaultValue: 'https://mwomeogeo-nudges.islaay.workers.dev',
+);
 
 class MealNudges extends ChangeNotifier {
   MealNudges(this.preferences, this.idToken, {Uri? endpoint})

@@ -64,7 +64,9 @@ export default {
       // Decoding above is validation only. This request is the authentication
       // boundary: Google verifies the signature and the deployed rules verify membership.
       const url = `https://firestore.googleapis.com/v1/projects/${project}/databases/(default)/documents/tables/${body.tableId}?mask.fieldPaths=memberIds`;
-      const verified = await fetch(url, {headers: {authorization}, redirect: 'error',
+      // Workers supports manual/follow only. Never forward the identity token
+      // to a redirect destination; non-2xx responses fail closed below.
+      const verified = await fetch(url, {headers: {authorization}, redirect: 'manual',
         signal: AbortSignal.timeout(10000)});
       if (verified.status === 401) return problem(401, 'unauthorized');
       if ([403, 404].includes(verified.status)) return problem(403, 'forbidden');
@@ -152,7 +154,7 @@ export class NudgeRegistry {
         try {
           const host = device.environment === 'sandbox' ? 'api.sandbox.push.apple.com' : 'api.push.apple.com';
           const response = await fetch(`https://${host}/3/device/${device.token}`, {
-            method: 'POST', redirect: 'error', signal: AbortSignal.timeout(10000),
+            method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(10000),
             headers: {authorization: `bearer ${jwt}`, 'apns-topic': topic,
               'apns-push-type': 'alert', 'apns-priority': '10', 'content-type': 'application/json',
               'apns-expiration': String(Math.floor(now / 1000) + 3600), 'apns-collapse-id': collapse},

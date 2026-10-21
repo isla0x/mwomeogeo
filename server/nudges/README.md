@@ -1,8 +1,10 @@
-# 밥 안부 푸시 알림 — 서버 배포 대기
+# 밥 안부 푸시 알림 — 서버 연결 완료
 
-식사별 종 버튼을 누르면 같은 식탁에서 알림을 켠 다른 사람에게 `아침 뭐 먹어!?`, `점심 뭐 먹어!?`, `저녁 뭐 먹어!?`를 즉시 보냅니다. 같은 식탁/식사에는 30분 제한을 적용합니다. 현재 이 브랜치는 알림 코드 배포·실기기 검증 전입니다. main의 빌드 9는 글씨 크기 변경까지 포함합니다.
+식사별 종 버튼을 누르면 같은 식탁에서 알림을 켠 다른 사람에게 `아침 뭐 먹어!?`, `점심 뭐 먹어!?`, `저녁 뭐 먹어!?`를 보냅니다. 같은 식탁/식사에는 30분 제한을 적용합니다. 빌드 10에 운영 서버 주소가 기본 설정되어 있습니다. 실제 iPhone 두 기기 수신 확인은 아직 하지 않았습니다.
 
-2026-10-21 설정 상태: 앱 한 개에 제한된 production APNs 키를 생성했고 Cloudflare `mwomeogeo-nudges`의 Production 비밀 설정 3개에 암호화해 저장했습니다. Apple App ID의 Push Notifications도 활성화했습니다. Worker 주소는 `https://mwomeogeo-nudges.islaay.workers.dev`이며 아직 기본 Hello World 코드입니다. 알림 코드와 SQLite Durable Object 배포가 끝나기 전에는 앱의 `NUDGE_API_URL`에 이 주소를 적용하지 않습니다. 배포 도구용 단일 Worker Editor 권한은 생성 전 사용자 확인을 기다립니다.
+2026-10-21 설정 상태: 앱 한 개에 제한된 production APNs 키를 생성했고 Cloudflare `mwomeogeo-nudges`의 Production 비밀 설정 3개에 암호화해 저장했습니다. Apple App ID의 Push Notifications도 활성화했습니다. `https://mwomeogeo-nudges.islaay.workers.dev`에 알림 코드와 SQLite Durable Object를 배포했고 버전 `86542357-6b87-42ed-bd1e-105abd5f7ca6`이 운영 트래픽 100%를 처리합니다. 인증 없음·위조 인증·실제 익명 인증의 비멤버 요청 차단을 포함한 운영 검사 5개를 통과했습니다. 검사 중 생성한 임시 익명 계정은 삭제했고 식탁이나 실제 푸시는 만들지 않았습니다.
+
+이 배포에는 해당 Worker 하나의 Editor 권한만 가진 임시 토큰을 사용했습니다. 처음 `wrangler deploy`는 코드·저장소 업로드 이후 계정 전체의 서브도메인 조회 권한이 없어 종료 오류를 냈습니다. 기존 운영 도메인은 유지되었고, 이후 코드는 `wrangler versions upload`와 `wrangler versions deploy VERSION_ID@100% --yes`로 업로드·활성화했습니다. 계정 전체 권한을 추가하지 않았습니다. 서버 로그 영구 저장은 비활성 상태입니다.
 
 ## 처음 한 번 연결
 
@@ -22,11 +24,11 @@ npx wrangler secret put APNS_TEAM_ID
 
 `APNS_PRIVATE_KEY`에는 `.p8` 파일의 전체 PEM 내용을 안전한 입력창에서 입력합니다. 나머지는 Apple의 해당 Key ID/Team ID입니다. 개인 키나 Firebase 관리자 키를 앱에 포함하지 않습니다.
 
-4. 실제 배포된 `https://...workers.dev` 주소로 앱을 빌드합니다. 주소는 공개 설정이며 개인 키가 아닙니다.
+4. 앱을 빌드합니다. 운영 주소는 기본 설정되어 있고 공개 설정이므로 개인 키가 아닙니다. 별도 환경이 필요할 때만 `--dart-define=NUDGE_API_URL=https://별도주소.workers.dev`로 바꿉니다.
 
 ```sh
 flutter pub get
-flutter build ipa --build-number=10 --dart-define=NUDGE_API_URL=https://실제배포주소.workers.dev
+flutter build ipa --build-number=10
 open build/ios/archive/Runner.xcarchive
 ```
 
@@ -51,7 +53,7 @@ npm test
 npx wrangler deploy --dry-run
 ```
 
-Node 테스트 5개는 인증/권한/입력 경계, 본인 제외/문구/중복 방지, 동시 전송 제한, 토큰 교체/끄기/소유권, APNs 거절 처리를 모의합니다. iOS AppDelegate는 실제 iOS SDK와 Flutter 헤더로 Swift 타입 검사를 통과했습니다. 코드 서명·실제 빌드/배포·두 기기 수신은 별도 확인이 필요합니다.
+Node 테스트 6개는 인증/권한/입력 경계, 본인 제외/문구/중복 방지, 동시 전송 제한, 토큰 교체/끄기/소유권, APNs 거절, 업스트림 리디렉션 거부를 모의합니다. Workers가 지원하지 않는 `redirect: 'error'` 대신 `manual`을 사용하고 3xx는 인증·전송 성공으로 처리하지 않습니다. Flutter 테스트 19개와 변경 파일 분석을 통과했습니다. iOS AppDelegate는 실제 iOS SDK와 Flutter 헤더로 Swift 타입 검사를 통과했습니다. 코드 서명·실제 iPhone 빌드·두 기기 수신은 별도 확인이 필요합니다. 운영 검사 기록은 `preview/nudge-live-checks.json`에 있습니다.
 
 공식 참고:
 - https://firebase.google.com/docs/functions/get-started (Functions 배포에는 Blaze 필요)

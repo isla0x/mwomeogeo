@@ -1,16 +1,18 @@
 {
   "app_version": "1.0.0+10",
-  "status": "configuration_pending",
+  "status": "server_deployed_device_verification_pending",
   "flutter_tests": "19 passed including nudge preview and authorized feed opening",
   "analyzer": "7 changed files, zero diagnostics",
-  "worker_tests": "5 passed with mocked Google/APNs and transactional storage",
+  "worker_tests": "6 passed with mocked Google/APNs and transactional storage, including redirect rejection",
   "worker_bundle": "wrangler deploy --dry-run passed",
   "ios_swift": "typecheck passed with iOS 27.1 SDK and Flutter iOS headers",
-  "live_deployment": false,
+  "live_deployment": true,
   "apns_credentials_configured": true,
   "apple_app_id_push_enabled": true,
   "cloudflare_worker_created": true,
   "cloudflare_worker_url": "https://mwomeogeo-nudges.islaay.workers.dev",
-  "cloudflare_worker_code": "Hello World; notification code and Durable Object deployment pending",
+  "cloudflare_worker_code": "Meal nudge worker with SQLite Durable Object",
+  "cloudflare_worker_version": "86542357-6b87-42ed-bd1e-105abd5f7ca6",
+  "live_auth_checks": "5 passed; no notifications sent; temporary test identity removed",
   "physical_iphone_delivery_tested": false
 }

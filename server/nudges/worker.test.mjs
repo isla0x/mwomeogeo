@@ -30,6 +30,7 @@ async function setup() {
   const registry = new NudgeRegistry({storage, waitUntil() {}}, env);
   env.NUDGES = {idFromName: value => value, get: () => ({fetch: request => registry.fetch(request)})};
   globalThis.fetch = async (url, options) => {
+    assert.equal(options.redirect, 'manual', 'Workers must not forward credentials on redirects');
     if (url.startsWith('https://firestore.googleapis.com/')) return Response.json({
       fields: {memberIds: {arrayValue: {values: members.map(uid => ({stringValue: uid}))}}}}, {status: firestoreStatus});
     assert.match(url, /^https:\/\/api(\.sandbox)?\.push\.apple\.com\/3\/device\/[a-f0-9]+$/);
@@ -105,4 +106,21 @@ test('APNs rejection is not reported as success and bad tokens are removed', asy
   assert.equal((await send()).status, 502);
   assert.equal((await send(2)).status, 404);
   assert.equal(await storage.get('user:receiver'), undefined);
+});
+
+test('upstream redirects never authenticate or count as accepted notifications', async () => {
+  await setup();
+  const normal = globalThis.fetch;
+  globalThis.fetch = async (url, options) => {
+    assert.equal(options.redirect, 'manual');
+    return new Response(null, {status: 302, headers: {location: 'https://redirect.invalid'}});
+  };
+  assert.equal((await send()).status, 503);
+  assert.equal(pushes.length, 0);
+  globalThis.fetch = normal;
+  await worker.fetch(request('/devices', device(), 'receiver'), env);
+  globalThis.fetch = (url, options) => url.includes('push.apple.com')
+    ? Promise.resolve(new Response(null, {status: 302, headers: {location: 'https://redirect.invalid'}}))
+    : normal(url, options);
+  assert.equal((await send()).status, 502);
 });
