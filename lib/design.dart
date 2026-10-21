@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -102,7 +103,7 @@ class Avatar extends StatelessWidget {
   );
 }
 
-class MealPhoto extends StatelessWidget {
+class MealPhoto extends StatefulWidget {
   const MealPhoto(
     this.post,
     this.store, {
@@ -115,6 +116,41 @@ class MealPhoto extends StatelessWidget {
   final double? height;
   final bool edition;
   @override
+  State<MealPhoto> createState() => _MealPhotoState();
+}
+
+class _MealPhotoState extends State<MealPhoto> {
+  MealPost get post => widget.post;
+  MealStore get store => widget.store;
+  double? get height => widget.height;
+  bool get edition => widget.edition;
+  Future<Uint8List>? photo;
+
+  Future<Uint8List>? loadPhoto({bool refresh = false}) => post.isCloud
+      ? store.cloud.photoBytes(post.photo.substring(6), refresh: refresh)
+      : null;
+
+  @override
+  void initState() {
+    super.initState();
+    photo = loadPhoto();
+  }
+
+  @override
+  void didUpdateWidget(MealPhoto oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.post != post || oldWidget.store != store) {
+      photo = loadPhoto();
+    }
+  }
+
+  void retry() {
+    setState(() {
+      photo = loadPhoto(refresh: true);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final image = post.photo.startsWith('asset:')
         ? Image.asset(
@@ -122,10 +158,15 @@ class MealPhoto extends StatelessWidget {
             fit: BoxFit.cover,
           )
         : post.isCloud
-        ? FutureBuilder(
-            future: store.cloud.photoBytes(post.photo.substring(6)),
+        ? FutureBuilder<Uint8List>(
+            future: photo,
             builder: (context, snapshot) {
-              if (snapshot.hasError) return const PhotoFallback();
+              if (snapshot.hasError) {
+                return PhotoFallback(
+                  message: '${snapshot.error}',
+                  onRetry: retry,
+                );
+              }
               if (!snapshot.hasData) {
                 return const ColoredBox(
                   color: sky,
@@ -141,7 +182,8 @@ class MealPhoto extends StatelessWidget {
               return Image.memory(
                 snapshot.data!,
                 fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => const PhotoFallback(),
+                errorBuilder: (_, _, _) =>
+                    PhotoFallback(message: '사진 파일을 표시하지 못했어요.', onRetry: retry),
               );
             },
           )
@@ -202,7 +244,13 @@ class MealPhoto extends StatelessWidget {
 }
 
 class PhotoFallback extends StatelessWidget {
-  const PhotoFallback({super.key});
+  const PhotoFallback({
+    super.key,
+    this.message = '사진을 불러오지 못했어요',
+    this.onRetry,
+  });
+  final String message;
+  final VoidCallback? onRetry;
   @override
   Widget build(BuildContext context) => ColoredBox(
     color: sky,
@@ -212,7 +260,16 @@ class PhotoFallback extends StatelessWidget {
         children: [
           const Icon(CupertinoIcons.photo, color: muted),
           const SizedBox(height: 8),
-          Text('사진을 불러오지 못했어요', style: type(11, color: muted)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Text(
+              message,
+              textAlign: TextAlign.center,
+              style: type(11, color: muted),
+            ),
+          ),
+          if (onRetry != null)
+            TextButton(onPressed: onRetry, child: const Text('다시 불러오기')),
         ],
       ),
     ),

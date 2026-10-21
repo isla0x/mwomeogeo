@@ -205,7 +205,11 @@ class CloudApi {
           .snapshots()
           .asyncMap((snapshot) => _readPosts(tableId, snapshot));
 
-  Future<Uint8List> photoBytes(String path) {
+  Future<Uint8List> photoBytes(String path, {bool refresh = false}) {
+    if (refresh) {
+      _photos.remove(path);
+      _photoSizes.remove(path);
+    }
     if (_photos.containsKey(path)) return _photos[path]!;
     // Bound the in-memory cache; private photos are never given public URLs.
     if (_photos.length >= 32) {
@@ -215,14 +219,15 @@ class CloudApi {
     }
     final future = _guard(() async {
       final photo = await _db.doc(path).get();
-      final blob = photo.data()?['data'];
-      if (blob is! Blob) throw const CloudFailure('사진을 불러오지 못했어요.');
-      final bytes = blob.bytes;
-      return bytes;
+      if (!photo.exists) {
+        throw const CloudFailure('저장된 사진을 찾지 못했어요. 다시 불러와 주세요.');
+      }
+      return readSharedPhoto(photo.data()?['data']);
     });
     _photos[path] = future;
     future.then<void>(
       (bytes) {
+        if (!identical(_photos[path], future)) return;
         _photoSizes[path] = bytes.length;
         while (_photoSizes.values.fold<int>(
                   0,
@@ -236,7 +241,10 @@ class CloudApi {
         }
       },
       onError: (Object _, StackTrace _) {
-        _photos.remove(path);
+        if (identical(_photos[path], future)) {
+          _photos.remove(path);
+          _photoSizes.remove(path);
+        }
       },
     );
     return future;
@@ -337,6 +345,22 @@ class CloudApi {
     await batch.commit();
     _photos.remove(post.photo.substring(6));
   });
+}
+
+Uint8List readSharedPhoto(Object? value) {
+  final bytes = switch (value) {
+    Blob(:final bytes) => bytes,
+    Uint8List bytes => bytes,
+    List values
+        when values.every(
+          (value) => value is int && value >= 0 && value <= 255,
+        ) =>
+      values.cast<int>(),
+    _ => throw const CloudFailure('사진 데이터 형식을 읽지 못했어요.'),
+  };
+  if (bytes.isEmpty) throw const CloudFailure('저장된 사진 데이터가 비어 있어요.');
+  // Own the image buffer independently of the native Firestore message buffer.
+  return Uint8List.fromList(bytes);
 }
 
 class CloudFailure implements Exception {
