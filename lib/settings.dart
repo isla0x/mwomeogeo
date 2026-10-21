@@ -5,85 +5,123 @@ import 'package:flutter/services.dart';
 import 'cloud.dart';
 import 'design.dart';
 import 'models.dart';
+import 'nudges.dart';
 import 'store.dart';
 
-Future<void> openSettings(BuildContext context, MealStore store) =>
-    showAppSheet(
-      context,
-      title: '나의 작은 식탁',
-      child: ListenableBuilder(
-        listenable: store,
-        builder: (sheetContext, _) => Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+Future<void> openSettings(
+  BuildContext context,
+  MealStore store,
+) => showAppSheet(
+  context,
+  title: '나의 작은 식탁',
+  child: ListenableBuilder(
+    listenable: store,
+    builder: (sheetContext, _) => Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
           children: [
-            Row(
-              children: [
-                Avatar(store.name, size: 46),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        store.name,
-                        style: type(19, weight: FontWeight.w500),
-                      ),
-                      Text('오늘도 잘 챙겨 먹는 중', style: type(12, color: muted)),
-                    ],
-                  ),
-                ),
-                TextButton(
-                  onPressed: () => editName(sheetContext, store),
-                  child: const Text('이름 변경'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            TextButton.icon(
-              onPressed: () => notifications(sheetContext, store),
-              icon: const Icon(CupertinoIcons.bell, size: 18),
-              label: const Text('식탁 소식'),
-            ),
-            settingRow('사진첩에 자동 저장', '저장 안 함'),
-            settingRow('현재 식탁', store.table?.name ?? '없음'),
-            if (store.table != null)
-              settingRow(
-                '기록 보관',
-                store.table!.isCloud ? '초대한 사람끼리만' : '이 기기 안에 보관',
-              ),
-            if (store.cloud.signedIn) settingRow('함께 쓰는 식탁', '이 기기와 연결됨'),
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Text(
-                '앱에서 찍은 사진은 내 사진첩에 쌓이지 않아요.\n앱을 삭제하면 이 기기에만 보관한 기록도 사라져요.',
-                style: type(12, color: muted, height: 1.9),
+            Avatar(store.name, size: 46),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(store.name, style: type(19, weight: FontWeight.w500)),
+                  Text('오늘도 잘 챙겨 먹는 중', style: type(12, color: muted)),
+                ],
               ),
             ),
-            const SizedBox(height: 18),
-            PrimaryButton(
-              '함께 쓰는 식탁 관리',
-              onPressed: () {
-                Navigator.pop(sheetContext);
-                openTables(context, store);
-              },
-              icon: CupertinoIcons.person_2,
-            ),
-            const SizedBox(height: 18),
-            Text(
-              '회원가입 없이 이 기기에서 이어 써요. 기기를 바꾸거나 앱 데이터를 초기화하면 새로 초대받아야 할 수 있어요.',
-              style: type(11, color: muted, height: 1.8),
-            ),
-            const SizedBox(height: 18),
-            Center(
-              child: Text(
-                '뭐먹어?  1.0.0 · CHERRY MILK',
-                style: type(10, color: muted, spacing: 1),
-              ),
+            TextButton(
+              onPressed: () => editName(sheetContext, store),
+              child: const Text('이름 변경'),
             ),
           ],
         ),
-      ),
-    );
+        const SizedBox(height: 24),
+        TextButton.icon(
+          onPressed: () => notifications(sheetContext, store),
+          icon: const Icon(CupertinoIcons.bell, size: 18),
+          label: const Text('식탁 소식'),
+        ),
+        ListenableBuilder(
+          listenable: store.nudges,
+          builder: (_, _) => AppOption(
+            label: '식사 알림 받기',
+            subtitle: store.nudges.busy
+                ? '알림 연결 중이에요'
+                : store.nudges.enabled
+                ? '상대의 밥 안부를 알림으로 받아요'
+                : '알림을 허용하면 상대의 밥 안부를 받아요',
+            icon: store.nudges.enabled
+                ? CupertinoIcons.bell_fill
+                : CupertinoIcons.bell,
+            selected: store.nudges.enabled,
+            onTap: store.nudges.busy
+                ? null
+                : () async {
+                    final table = store.table;
+                    if (table == null || !table.isCloud || store.demo) {
+                      toast(sheetContext, '함께 쓰는 식탁에서 알림을 받을 수 있어요.');
+                      return;
+                    }
+                    try {
+                      await store.nudges.setEnabled(
+                        table.id,
+                        !store.nudges.enabled,
+                      );
+                      if (sheetContext.mounted) {
+                        toast(
+                          sheetContext,
+                          store.nudges.enabled ? '식사 알림을 켰어요.' : '식사 알림을 껐어요.',
+                        );
+                      }
+                    } catch (e) {
+                      if (sheetContext.mounted) toast(sheetContext, '$e');
+                    }
+                  },
+          ),
+        ),
+        settingRow('사진첩에 자동 저장', '저장 안 함'),
+        settingRow('현재 식탁', store.table?.name ?? '없음'),
+        if (store.table != null)
+          settingRow(
+            '기록 보관',
+            store.table!.isCloud ? '초대한 사람끼리만' : '이 기기 안에 보관',
+          ),
+        if (store.cloud.signedIn) settingRow('함께 쓰는 식탁', '이 기기와 연결됨'),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Text(
+            '앱에서 찍은 사진은 내 사진첩에 쌓이지 않아요.\n앱을 삭제하면 이 기기에만 보관한 기록도 사라져요.',
+            style: type(12, color: muted, height: 1.9),
+          ),
+        ),
+        const SizedBox(height: 18),
+        PrimaryButton(
+          '함께 쓰는 식탁 관리',
+          onPressed: () {
+            Navigator.pop(sheetContext);
+            openTables(context, store);
+          },
+          icon: CupertinoIcons.person_2,
+        ),
+        const SizedBox(height: 18),
+        Text(
+          '회원가입 없이 이 기기에서 이어 써요. 기기를 바꾸거나 앱 데이터를 초기화하면 새로 초대받아야 할 수 있어요.',
+          style: type(11, color: muted, height: 1.8),
+        ),
+        const SizedBox(height: 18),
+        Center(
+          child: Text(
+            '뭐먹어?  1.0.0 · CHERRY MILK',
+            style: type(10, color: muted, spacing: 1),
+          ),
+        ),
+      ],
+    ),
+  ),
+);
 Widget settingRow(String label, String value) => Container(
   padding: const EdgeInsets.symmetric(vertical: 16),
   decoration: const BoxDecoration(
@@ -441,6 +479,73 @@ class _TablesState extends State<_Tables> {
               ? '함께 쓰는 사진과 반응은 식탁을 보고 있을 때 자동으로 갱신돼요.'
               : CloudApi.initializationError ?? '사진은 이 기기의 앱 안에 보관돼요.',
           style: type(11, color: muted),
+        ),
+      ],
+    ),
+  );
+}
+
+Future<void> openMealNudge(
+  BuildContext context,
+  MealStore store,
+  int meal,
+) async {
+  final table = store.table;
+  if (table == null) return;
+  await showAppSheet(
+    context,
+    title: '밥 안부 보내기',
+    subtitle: '${table.name} · 나를 제외한 식탁 사람들에게',
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border.all(color: line),
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(CupertinoIcons.bell, size: 16, color: cherry),
+                  const SizedBox(width: 8),
+                  Text(
+                    '뭐먹어?',
+                    style: type(12, color: muted, weight: FontWeight.w500),
+                  ),
+                  const Spacer(),
+                  Text('지금', style: type(10, color: muted)),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Text(
+                mealNudgeText(meal),
+                style: type(24, weight: FontWeight.w600, spacing: -.8),
+              ),
+              const SizedBox(height: 5),
+              Text('한 끼 사진으로 안부를 전해줘.', style: type(13, color: muted)),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          store.demo
+              ? '미리보기예요. 실제 알림은 보내지 않아요.'
+              : !table.isCloud
+              ? '초대 코드로 함께 쓰는 식탁에서 보낼 수 있어요.'
+              : '식사 알림을 준비 중이에요. 다음 업데이트에서 만나요.',
+          style: type(12, color: muted),
+        ),
+        const SizedBox(height: 22),
+        PrimaryButton(
+          '${mealNames[meal]} 알림 보내기',
+          icon: CupertinoIcons.paperplane,
+          onPressed: null,
         ),
       ],
     ),

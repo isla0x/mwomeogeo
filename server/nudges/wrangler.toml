@@ -1,0 +1,12 @@
+name = "mwomeogeo-nudges"
+main = "worker.mjs"
+compatibility_date = "2026-10-21"
+workers_dev = true
+# No paid plan, Google billing account, cron or Firebase Functions required.
+[durable_objects]
+bindings = [{ name = "NUDGES", class_name = "NudgeRegistry" }]
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["NudgeRegistry"]
+# Set APNS_PRIVATE_KEY, APNS_KEY_ID and APNS_TEAM_ID with wrangler secret put.
+# Never put private keys here or in the Flutter build.

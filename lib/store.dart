@@ -7,12 +7,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'cloud.dart';
 import 'models.dart';
+import 'nudges.dart';
 
 class MealStore extends ChangeNotifier {
   MealStore(this.preferences, this.directory);
   final SharedPreferences preferences;
   final Directory directory;
   final CloudApi cloud = CloudApi();
+  late final nudges = MealNudges(preferences, cloud.identityToken);
   StreamSubscription<List<DiningTable>>? _tablesSubscription;
   StreamSubscription<List<MealPost>>? _postsSubscription;
   String? _watchedTable;
@@ -310,6 +312,7 @@ class MealStore extends ChangeNotifier {
       notifyListeners();
     }, onError: _syncFailed);
     _watchSelectedTable();
+    await nudges.restore(tableId);
   }
 
   void _watchSelectedTable() {
@@ -341,6 +344,7 @@ class MealStore extends ChangeNotifier {
   void dispose() {
     unawaited(_tablesSubscription?.cancel());
     unawaited(_postsSubscription?.cancel());
+    nudges.dispose();
     super.dispose();
   }
 }

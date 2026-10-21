@@ -1,0 +1,12 @@
+{
+  "app_version": "1.0.0+10",
+  "status": "configuration_pending",
+  "flutter_tests": "19 passed including nudge preview and authorized feed opening",
+  "analyzer": "7 changed files, zero diagnostics",
+  "worker_tests": "5 passed with mocked Google/APNs and transactional storage",
+  "worker_bundle": "wrangler deploy --dry-run passed",
+  "ios_swift": "typecheck passed with iOS 27.1 SDK and Flutter iOS headers",
+  "live_deployment": false,
+  "apns_credentials_configured": false,
+  "physical_iphone_delivery_tested": false
+}

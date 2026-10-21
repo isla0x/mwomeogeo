@@ -426,6 +426,52 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
     expect(tester.takeException(), isNull);
   });
+  testWidgets(
+    'meal nudge preview targets lunch and notification opens the allowed feed',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final key = GlobalKey();
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: key,
+          child: MwomeogeoApp(store: store),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byTooltip('점심 알림 보내기'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.byTooltip('점심 알림 보내기'));
+      await tester.pumpAndSettle();
+      expect(find.text('점심 뭐 먹어!?'), findsOneWidget);
+      expect(find.text('미리보기예요. 실제 알림은 보내지 않아요.'), findsOneWidget);
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.widgetWithText(FilledButton, '점심 알림 보내기'),
+            )
+            .onPressed,
+        isNull,
+      );
+      await screenshot(tester, key, '14-meal-nudge');
+      await tester.tap(find.byTooltip('닫기'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('기록'));
+      await tester.pumpAndSettle();
+      store.nudges.onOpen?.call('not-a-member');
+      await tester.pumpAndSettle();
+      expect(find.text('우리의 하루.'), findsOneWidget);
+      store.nudges.onOpen?.call(store.tableId);
+      await tester.pumpAndSettle();
+      expect(find.text('오늘도, 잘 먹었어?'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
   testWidgets('small display and large text retain usable navigation', (
     tester,
   ) async {
