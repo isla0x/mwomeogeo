@@ -7,6 +7,10 @@
   "worker_bundle": "wrangler deploy --dry-run passed",
   "ios_swift": "typecheck passed with iOS 27.1 SDK and Flutter iOS headers",
   "live_deployment": false,
-  "apns_credentials_configured": false,
+  "apns_credentials_configured": true,
+  "apple_app_id_push_enabled": true,
+  "cloudflare_worker_created": true,
+  "cloudflare_worker_url": "https://mwomeogeo-nudges.islaay.workers.dev",
+  "cloudflare_worker_code": "Hello World; notification code and Durable Object deployment pending",
   "physical_iphone_delivery_tested": false
 }
