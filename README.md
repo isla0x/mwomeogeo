@@ -34,7 +34,7 @@ Xcode에서 Runner 타깃 → Signing & Capabilities → Team을 본인 Apple De
 cd ~/Documents/mwomeogeo
 git pull --ff-only
 flutter pub get
-flutter build ipa --build-number=10
+flutter build ipa --build-number=11
 open build/ios/archive/Runner.xcarchive
 ```
 
@@ -84,7 +84,7 @@ python3 tool/configure_ios_firebase.py /파일경로/GoogleService-Info.plist
 
 빌드 10은 끼니 옆 종 버튼으로 같은 식탁에서 알림을 켠 상대에게 밥 안부를 보냅니다. Apple production 푸시 키와 무료 Workers 서버를 연결했고 앱에 운영 주소를 기본 설정했습니다. **내 정보 → 식사 알림 받기**를 켜야 받을 수 있습니다. 새 iPhone 빌드를 설치한 뒤 두 기기에서 실제 수신을 확인해야 합니다. 서버 검증과 확인 절차는 [server/nudges/README.md](server/nudges/README.md)에 있습니다.
 
-빌드 9는 본문·버튼·댓글·작은 안내 글씨를 1pt씩 키웁니다. 16pt 이하의 공통 글꼴 크기에만 적용하고 제목 크기는 유지합니다.
+빌드 11은 본문·버튼·댓글·작은 안내 글씨를 빌드 10보다 1pt 더 키웁니다. 16pt 이하의 공통 글꼴 크기에 총 2pt를 더하며 제목 크기는 유지합니다. 본문·버튼은 16pt, 설명은 14~15pt, 하단 메뉴는 12pt입니다. 별도 크기를 지정하지 않은 텍스트 버튼도 16pt로 통일합니다. 같은 크기를 적용한 실제 Flutter 화면은 `preview/`에 있습니다.
 
 빌드 8은 앱이 직접 표시하는 기록 메뉴, 삭제 확인, 이름 변경, 사진 선택, 식탁/공유 대상 선택과 모든 하단 시트를 공통 디자인으로 통일합니다. 크림색 표면·얇은 테두리·체리색 액션을 사용하며 Material 기본 분홍색 틴트를 제거합니다. 카메라/사진 권한 요청과 시스템 공유창은 운영체제의 기본 화면입니다. 실제 코드로 렌더링한 목업은 `preview/13-modal-redesign.png`에 있습니다.
 
@@ -117,7 +117,7 @@ python3 tool/configure_ios_firebase.py /파일경로/GoogleService-Info.plist
 - tool/verify.dart에서 사진 분리 보관, 재시작 복원, 교차 식탁 표시, 댓글·반응, 날짜 필터, 삭제 및 주요 화면 렌더링 검증
 - test/shared_photo_test.dart에서 고해상도 사진 압축·크기 상한·비율 보존·잘못된 사진 입력을 검사
 - tool/rules/firestore.test.cjs에서 실제 Firestore 에뮬레이터로 58개 권한·공유 검사를 통과했습니다. 초대 없는 접근, 멤버 위조, 사진 크기 초과, 타인 삭제, 삭제 중 댓글 추가를 거부하고 정상 생성·초대·중복 참여·사진 공유·작성자 삭제·20명 제한을 확인합니다. 운영 서버에 테스트 계정이나 데이터를 만들지 않습니다.
-- Flutter 테스트 18개 통과. 알림·선택 화면에서 삭제 취소/확인, 이름 공백 검증, 작은 화면과 키보드/큰 글자 조합도 검사합니다. 추가 테스트는 Blob·바이트 배열·목록을 독립 이미지 버퍼로 읽고 Flutter 이미지 디코더에서 표시 가능한지 검사합니다. 네이티브 메시지 채널을 모의한 화면 테스트로 사진 요청 실패 후 재시도하여 정상 표시되는지 검사합니다.
+- 빌드 11에서 Flutter 테스트 19개 통과. 알림·선택 화면에서 삭제 취소/확인, 이름 공백 검증, 작은 화면과 키보드/큰 글자 조합도 검사합니다. 추가 테스트는 Blob·바이트 배열·목록을 독립 이미지 버퍼로 읽고 Flutter 이미지 디코더에서 표시 가능한지 검사합니다. 네이티브 메시지 채널을 모의한 화면 테스트로 사진 요청 실패 후 재시도하여 정상 표시되는지 검사합니다.
 - 실제 iPhone 두 기기 사이의 공유 확인은 빌드 7 설치 후 필요합니다.
 - **iOS 네이티브 빌드·설치는 미검증**: 이 작업 환경은 Xcode 캐시 쓰기와 CoreSimulator 접근을 제한합니다.
 - Flutter 단위·화면 테스트와 별도 Flutter 엔진 검증기를 사용했습니다.

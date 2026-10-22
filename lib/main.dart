@@ -87,7 +87,10 @@ class MwomeogeoApp extends StatelessWidget {
         surfaceTintColor: Colors.transparent,
       ),
       textButtonTheme: TextButtonThemeData(
-        style: TextButton.styleFrom(foregroundColor: cherry),
+        style: TextButton.styleFrom(
+          foregroundColor: cherry,
+          textStyle: type(14, weight: FontWeight.w500),
+        ),
       ),
       dividerTheme: const DividerThemeData(color: line, thickness: 1),
       appBarTheme: const AppBarTheme(
