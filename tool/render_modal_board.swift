@@ -28,7 +28,7 @@ for (i, entry) in entries.enumerated() {
     image.draw(in: NSRect(x:x,y:70,width:390,height:844))
     NSGraphicsContext.restoreGraphicsState()
 }
-text("CHERRY MILK  /  실제 앱 화면 렌더링 · Build 8", 45, 25, 13, .medium, color(104,117,128))
+text("CHERRY MILK  /  실제 앱 화면 렌더링 · Build 11", 45, 25, 13, .medium, color(104,117,128))
 NSGraphicsContext.restoreGraphicsState()
 let output = NSBitmapImageRep(cgImage: ctx.makeImage()!).representation(using: .png, properties: [:])!
 try output.write(to: URL(fileURLWithPath: "preview/13-modal-redesign.png"))

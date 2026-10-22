@@ -60,6 +60,13 @@ class CloudApi {
     });
   }
 
+  Future<String> identityToken() => _guard(() async {
+    if (!signedIn) throw const CloudFailure('식탁 연결을 먼저 확인해 주세요.');
+    final token = await _auth.currentUser!.getIdToken();
+    if (token == null) throw const CloudFailure('식탁 연결을 먼저 확인해 주세요.');
+    return token;
+  });
+
   Future<void> setDisplayName(String name) async {
     if (signedIn) {
       await _guard(() => _auth.currentUser!.updateDisplayName(name));

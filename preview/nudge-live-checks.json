@@ -1,0 +1,28 @@
+{
+  "checked_at": "2026-10-21",
+  "worker_version": "86542357-6b87-42ed-bd1e-105abd5f7ca6",
+  "checks": [
+    {
+      "case": "route guard",
+      "status": 404
+    },
+    {
+      "case": "missing authentication rejected",
+      "status": 401
+    },
+    {
+      "case": "forged Firebase token rejected",
+      "status": 403
+    },
+    {
+      "case": "invalid device registration rejected",
+      "status": 400
+    },
+    {
+      "case": "valid anonymous nonmember rejected through Firestore rules",
+      "status": 403
+    }
+  ],
+  "temporary_test_identity_removed": true,
+  "notifications_sent": 0
+}

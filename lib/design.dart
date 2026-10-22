@@ -26,7 +26,8 @@ TextStyle type(
   double spacing = -.3,
   double height = 1.5,
 }) => TextStyle(
-  fontSize: size <= 16 ? size + 1 : size,
+  fontFamily: 'Pretendard',
+  fontSize: size <= 16 ? size + 2 : size,
   color: color,
   fontWeight: weight,
   letterSpacing: spacing,

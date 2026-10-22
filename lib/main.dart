@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'design.dart';
 import 'cloud.dart';
 import 'models.dart';
+import 'nudges.dart';
 import 'store.dart';
 import 'compose.dart';
 import 'settings.dart';
@@ -86,7 +87,10 @@ class MwomeogeoApp extends StatelessWidget {
         surfaceTintColor: Colors.transparent,
       ),
       textButtonTheme: TextButtonThemeData(
-        style: TextButton.styleFrom(foregroundColor: cherry),
+        style: TextButton.styleFrom(
+          foregroundColor: cherry,
+          textStyle: type(14, weight: FontWeight.w500),
+        ),
       ),
       dividerTheme: const DividerThemeData(color: line, thickness: 1),
       appBarTheme: const AppBarTheme(
@@ -146,10 +150,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   DateTime now = DateTime.now();
   DateTime month = DateTime(DateTime.now().year, DateTime.now().month);
   bool refreshing = false;
+  final Set<int> nudging = {};
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    s.nudges.onOpen = openNudge;
     if (s.cloud.configured) {
       unawaited(
         s.connect().catchError((Object error) {
@@ -162,6 +168,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    s.nudges.onOpen = null;
     super.dispose();
   }
 
@@ -169,7 +176,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       setState(() => now = DateTime.now());
+      unawaited(s.nudges.restore(s.table?.id).catchError((Object _) {}));
     }
+  }
+
+  void openNudge(String id) {
+    if (!mounted || !s.tables.any((table) => table.id == id)) return;
+    s.selectTable(id);
+    setState(() {
+      page = 0;
+      now = DateTime.now();
+    });
   }
 
   Future<void> refresh() async {
@@ -457,6 +474,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               const SizedBox(width: 8),
               Text('${posts.length}', style: type(11, color: muted)),
               const Spacer(),
+              nudgeButton(meal),
               TextButton(
                 onPressed: () => capture(initialMeal: meal),
                 child: Text(
@@ -512,6 +530,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               style: type(11, color: muted),
             ),
           ),
+          nudgeButton(meal),
           TextButton(
             onPressed: () => capture(initialMeal: meal),
             child: Text(
@@ -524,6 +543,38 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       ),
     ),
   );
+
+  Widget nudgeButton(int meal) => IconButton(
+    tooltip: '${mealNames[meal]} 알림 보내기',
+    onPressed: nudging.contains(meal) ? null : () => nudgeMeal(meal),
+    icon: nudging.contains(meal)
+        ? const SizedBox(
+            width: 17,
+            height: 17,
+            child: CircularProgressIndicator(strokeWidth: 1.5),
+          )
+        : const Icon(CupertinoIcons.bell, size: 17, color: cherry),
+  );
+
+  Future<void> nudgeMeal(int meal) async {
+    final table = s.table;
+    if (table == null || nudging.contains(meal)) return;
+    if (s.demo || !table.isCloud || !s.nudges.configured) {
+      await openMealNudge(context, s, meal);
+      return;
+    }
+    setState(() => nudging.add(meal));
+    try {
+      await s.nudges.send(table.id, meal, requestId: newId());
+      if (mounted) {
+        toast(context, '${table.name}에 “${mealNudgeText(meal)}” 알림을 보냈어요.');
+      }
+    } catch (e) {
+      if (mounted) toast(context, '$e');
+    } finally {
+      if (mounted) setState(() => nudging.remove(meal));
+    }
+  }
 
   Widget navigation() => Container(
     decoration: const BoxDecoration(
