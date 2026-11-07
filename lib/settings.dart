@@ -51,6 +51,7 @@ Future<void> openSettings(
               for (final option in const [
                 ('nudge', '밥 안부 알림', '상대가 “뭐 먹어!?” 하고 물어보면 알려요'),
                 ('post', '새 사진 알림', '같은 식탁의 다른 사람이 밥 사진을 올리면 알려요'),
+                ('like', '좋아요 알림', '내 밥 사진에 다른 사람이 반응을 남기면 알려요'),
                 ('comment', '내 사진의 댓글 알림', '내 밥 사진에 다른 사람이 댓글을 남기면 알려요'),
               ])
                 AppOption(
@@ -324,6 +325,31 @@ class _TablesState extends State<_Tables> {
     }
   }
 
+  Future<void> remove(DiningTable table) async {
+    if (busy) return;
+    final yes = await confirmDelete(
+      context,
+      title: table.isCloud ? '이 식탁에서 나갈까요?' : '이 식탁을 삭제할까요?',
+      description: table.isCloud
+          ? '${table.name}이 내 목록에서 사라져요.\n다른 멤버의 식탁과 기록은 그대로 남아요.'
+          : '${table.name}의 사진과 댓글이 함께 사라져요.\n삭제한 기록은 되돌릴 수 없어요.',
+      action: table.isCloud ? '나가기' : '삭제',
+    );
+    if (yes != true || !mounted) return;
+    setState(() {
+      busy = true;
+      error = null;
+    });
+    try {
+      await widget.store.removeTable(table);
+      if (mounted) toast(context, table.isCloud ? '식탁에서 나왔어요.' : '식탁을 삭제했어요.');
+    } catch (e) {
+      if (mounted) setState(() => error = '$e');
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: widget.store,
@@ -352,15 +378,28 @@ class _TablesState extends State<_Tables> {
           const SizedBox(height: 12),
         ],
         for (final table in widget.store.localTables)
-          AppOption(
-            label: table.name,
-            subtitle: '이 기기에 보관',
-            icon: CupertinoIcons.person_2,
-            selected: table.id == widget.store.tableId,
-            onTap: () {
-              widget.store.selectTable(table.id);
-              Navigator.pop(context);
-            },
+          Row(
+            children: [
+              Expanded(
+                child: AppOption(
+                  label: table.name,
+                  subtitle: '이 기기에 보관',
+                  icon: CupertinoIcons.person_2,
+                  selected: table.id == widget.store.tableId,
+                  onTap: busy
+                      ? null
+                      : () {
+                          widget.store.selectTable(table.id);
+                          Navigator.pop(context);
+                        },
+                ),
+              ),
+              IconButton(
+                tooltip: '${table.name} 삭제',
+                onPressed: busy ? null : () => remove(table),
+                icon: const Icon(CupertinoIcons.trash, color: muted, size: 18),
+              ),
+            ],
           ),
         for (final table in widget.store.remoteTables)
           Container(
@@ -382,6 +421,11 @@ class _TablesState extends State<_Tables> {
                     widget.store.selectTable(table.id);
                     Navigator.pop(context);
                   },
+                ),
+                TextButton.icon(
+                  onPressed: busy ? null : () => remove(table),
+                  icon: const Icon(CupertinoIcons.square_arrow_right, size: 16),
+                  label: const Text('식탁 나가기'),
                 ),
                 Text('초대 코드', style: type(11, color: muted)),
                 Row(

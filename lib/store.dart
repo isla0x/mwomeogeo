@@ -53,12 +53,87 @@ class MealStore extends ChangeNotifier {
           )
           .toList()
         ..sort((a, b) => b.date.compareTo(a.date));
+  List<List<MealPost?>> mealRows(List<MealPost> posts) {
+    final seats = table?.memberIds.isNotEmpty == true
+        ? table!.memberIds
+        : (allPosts
+              .where((p) => p.tableIds.contains(tableId))
+              .map(mealAuthorKey)
+              .toSet()
+              .toList()
+            ..sort());
+    return fixedMealRows(posts, seats);
+  }
+
+  Future<void> removeTable(DiningTable target) async {
+    if (demo) throw StateError('미리보기 식탁은 실제 식탁이 아니에요.');
+    if (!tables.any((t) => t.id == target.id)) return;
+    if (target.isCloud) {
+      await cloud.leaveTable(target);
+      remoteTables.removeWhere((t) => t.id == target.id);
+      remotePosts.removeWhere((p) => p.tableIds.contains(target.id));
+    } else {
+      final previousTables = List<DiningTable>.from(localTables);
+      final previousPosts = List<MealPost>.from(localPosts);
+      localTables.removeWhere((t) => t.id == target.id);
+      final removed = localPosts
+          .where((p) => p.tableIds.contains(target.id))
+          .toList();
+      localPosts.removeWhere(
+        (p) => removed.contains(p) && p.tableIds.length == 1,
+      );
+      // Persist both lists atomically in one snapshot so a failed write cannot
+      // resurrect a default room from its legacy posts on the next launch.
+      final snapshot = jsonEncode({
+        'tables': [
+          for (final t in localTables) {'id': t.id, 'name': t.name},
+        ],
+        'posts': localPosts.map((p) {
+          final json = p.toJson();
+          json['tables'] = p.tableIds.where((id) => id != target.id).toList();
+          return json;
+        }).toList(),
+      });
+      try {
+        if (!await preferences.setString('localSnapshot', snapshot)) {
+          throw const FileSystemException('식탁을 삭제하지 못했어요.');
+        }
+      } catch (_) {
+        localTables = previousTables;
+        localPosts = previousPosts;
+        rethrow;
+      }
+      localPosts = (jsonDecode(snapshot)['posts'] as List)
+          .map((p) => MealPost.fromJson(p))
+          .toList();
+      for (final post in removed.where((p) => p.tableIds.length == 1)) {
+        if (!post.photo.startsWith('photos/')) continue;
+        try {
+          await File('${directory.path}/${post.photo}').delete();
+        } catch (_) {}
+      }
+    }
+    _reconcileSelection();
+    if (tableId.isEmpty) {
+      await preferences.remove('selectedTable');
+    } else {
+      await preferences.setString('selectedTable', tableId);
+    }
+    notifyListeners();
+  }
+
   Future<void> load() async {
     // Preview is opt-in for this session, including after upgrading old installs.
     demo = false;
     name = preferences.getString('name') ?? '나';
     tableId = preferences.getString('selectedTable') ?? '';
-    final savedTables = preferences.getString('localTables');
+    final snapshot = preferences.getString('localSnapshot');
+    final saved = snapshot == null
+        ? null
+        : jsonDecode(snapshot) as Map<String, dynamic>;
+    final savedTables = saved == null
+        ? preferences.getString('localTables')
+        : jsonEncode(saved['tables']);
     if (savedTables != null) {
       localTables = (jsonDecode(savedTables) as List)
           .map(
@@ -66,7 +141,9 @@ class MealStore extends ChangeNotifier {
           )
           .toList();
     }
-    final raw = preferences.getString('posts');
+    final raw = saved == null
+        ? preferences.getString('posts')
+        : jsonEncode(saved['posts']);
     if (raw != null) {
       localPosts = (jsonDecode(raw) as List)
           .map((j) => MealPost.fromJson(j))
@@ -90,10 +167,13 @@ class MealStore extends ChangeNotifier {
     final table = DiningTable('local-${newId()}', name);
     final updated = [...localTables, table];
     final ok = await preferences.setString(
-      'localTables',
-      jsonEncode([
-        for (final table in updated) {'id': table.id, 'name': table.name},
-      ]),
+      'localSnapshot',
+      jsonEncode({
+        'tables': [
+          for (final table in updated) {'id': table.id, 'name': table.name},
+        ],
+        'posts': localPosts.map((p) => p.toJson()).toList(),
+      }),
     );
     if (!ok) throw const FileSystemException('식탁을 저장하지 못했어요.');
     localTables = updated;
@@ -112,8 +192,13 @@ class MealStore extends ChangeNotifier {
 
   Future<void> _save() async {
     final ok = await preferences.setString(
-      'posts',
-      jsonEncode(localPosts.map((p) => p.toJson()).toList()),
+      'localSnapshot',
+      jsonEncode({
+        'tables': [
+          for (final t in localTables) {'id': t.id, 'name': t.name},
+        ],
+        'posts': localPosts.map((p) => p.toJson()).toList(),
+      }),
     );
     if (!ok) throw const FileSystemException('기록을 저장하지 못했어요. 저장 공간을 확인해 주세요.');
   }
@@ -226,7 +311,14 @@ class MealStore extends ChangeNotifier {
 
   Future<void> react(MealPost post, String kind) async {
     if (post.isCloud) {
-      await cloud.react(post, kind);
+      final reactionId = await cloud.react(post, kind);
+      if (reactionId != null) {
+        await nudges.activity(
+          post.tableIds.single,
+          post.id,
+          reactionId: reactionId,
+        );
+      }
       await refresh();
       return;
     }

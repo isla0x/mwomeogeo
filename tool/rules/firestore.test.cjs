@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {initializeTestEnvironment, assertFails, assertSucceeds} = require('@firebase/rules-unit-testing');
 const {doc, collection, getDoc, getDocs, query, where, writeBatch, updateDoc,
-  setDoc, deleteDoc, serverTimestamp, arrayUnion, Bytes} = require('firebase/firestore');
+  setDoc, deleteDoc, serverTimestamp, arrayUnion, arrayRemove, Timestamp, Bytes} = require('firebase/firestore');
 
 (async () => {
   const env = await initializeTestEnvironment({projectId:'demo-mwomeogeo',
@@ -63,6 +63,8 @@ const {doc, collection, getDoc, getDocs, query, where, writeBatch, updateDoc,
     await pass(setDoc(doc(guest,meal+'/comments/one'),{authorId:'guest',authorName:'친구',body:'맛있겠다',createdAt:serverTimestamp()}));
     await fail(setDoc(doc(guest,meal+'/reactions/owner_heart'),{userId:'owner',kind:'heart'}));
     await pass(setDoc(doc(guest,meal+'/reactions/guest_heart'),{userId:'guest',kind:'heart'}));
+    await pass(setDoc(doc(guest,meal+'/reactions/guest_yum'),{userId:'guest',kind:'yum',createdAt:serverTimestamp()}));
+    await fail(setDoc(doc(guest,meal+'/reactions/guest_bad'),{userId:'guest',kind:'heart',createdAt:Timestamp.fromMillis(1)}));
     await fail(deleteDoc(doc(guest,meal)));
     await fail(deleteDoc(doc(guest,photo)));
     await fail(updateDoc(doc(guest,meal),{deleting:true,updatedAt:serverTimestamp()}));
@@ -82,6 +84,10 @@ const {doc, collection, getDoc, getDocs, query, where, writeBatch, updateDoc,
       await pass(join(db,'member'+i));
     }
     await fail(join(outsider,'outsider'));
+    await pass(updateDoc(doc(guest,table),{memberIds:arrayRemove('guest'),joinCode:code,updatedAt:serverTimestamp()}));
+    await fail(getDoc(doc(guest,table)));
+    await pass(join(guest,'guest'));
+    await fail(updateDoc(doc(guest,table),{memberIds:arrayRemove('owner'),joinCode:code,updatedAt:serverTimestamp()}));
     console.log(`PASS: ${checks} Firestore security and sharing checks`);
   } finally {await env.cleanup();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

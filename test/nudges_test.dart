@@ -116,6 +116,7 @@ void main() {
         'nudge': false,
         'post': false,
         'comment': false,
+        'like': false,
       });
       await prefs.setBool('mealNudges', true);
       expect(nudges.enabled, isTrue);
@@ -135,6 +136,7 @@ void main() {
         'nudge': false,
         'post': false,
         'comment': true,
+        'like': false,
       });
       expect(nudges.commentsEnabled, isTrue);
       await nudges.setPreference('table', 'comment', false);
@@ -181,6 +183,21 @@ void main() {
         'kind': 'comment',
         'commentId': 'comment',
       });
+    },
+  );
+
+  test(
+    'like consent is independent and reaction identity reaches the server',
+    () async {
+      await nudges.setPreference('table', 'like', true);
+      expect(nudges.likesEnabled, isTrue);
+      expect(nudges.postsEnabled, isFalse);
+      expect(calls.last.$2['preferences']['like'], isTrue);
+      await nudges.activity('table', 'post', reactionId: 'user_heart');
+      await pumpEventQueue();
+      expect(calls.last.$1, '/activity');
+      expect(calls.last.$2['kind'], 'like');
+      expect(calls.last.$2['reactionId'], 'user_heart');
     },
   );
 

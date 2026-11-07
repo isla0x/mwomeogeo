@@ -4,6 +4,8 @@ import UserNotifications
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+  private var captureChannel: FlutterMethodChannel?
+  private var capturePending = false
   private var pushChannel: FlutterMethodChannel?
   private var registration: FlutterResult?
   private var registrationTimeout: DispatchWorkItem?
@@ -22,6 +24,16 @@ import UserNotifications
     let channel = FlutterMethodChannel(
       name: "com.chaen.mwomeogeo/nudges",
       binaryMessenger: engineBridge.applicationRegistrar.messenger())
+    let quick = FlutterMethodChannel(name: "com.chaen.mwomeogeo/capture",
+      binaryMessenger: engineBridge.applicationRegistrar.messenger())
+    captureChannel = quick
+    quick.setMethodCallHandler { [weak self] call, result in
+      guard let self else { return }
+      if call.method == "takeCapture" {
+        result(self.capturePending)
+        self.capturePending = false
+      } else { result(FlutterMethodNotImplemented) }
+    }
     pushChannel = channel
     channel.setMethodCallHandler { [weak self] call, result in
       guard let self else { return }
@@ -45,6 +57,14 @@ import UserNotifications
       default: result(FlutterMethodNotImplemented)
       }
     }
+  }
+
+  @discardableResult
+  func handleCaptureURL(_ url: URL) -> Bool {
+    guard url.scheme == "mwomeogeo", url.host == "capture", url.path.isEmpty else { return false }
+    capturePending = true
+    captureChannel?.invokeMethod("capture", arguments: nil)
+    return true
   }
 
   private func register(_ allowed: Bool, result: @escaping FlutterResult) {

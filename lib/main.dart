@@ -156,6 +156,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     s.nudges.onOpen = openNudge;
+    quickCapture.setMethodCallHandler((call) async {
+      if (call.method == 'capture') await takeQuickCapture();
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => takeQuickCapture());
     if (s.cloud.configured) {
       unawaited(
         s.connect().catchError((Object error) {
@@ -169,6 +173,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     s.nudges.onOpen = null;
+    quickCapture.setMethodCallHandler(null);
     super.dispose();
   }
 
@@ -202,27 +207,51 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> capture({int? initialMeal}) async {
-    if (s.demo) await s.setDemo(false);
-    if (!mounted) return;
-    if (s.table == null) {
-      await openTables(context, s);
-      return;
+  static const quickCapture = MethodChannel('com.chaen.mwomeogeo/capture');
+  bool capturing = false;
+  Future<void> takeQuickCapture() async {
+    try {
+      final pending = await quickCapture.invokeMethod<bool>('takeCapture');
+      if (pending == true && mounted) await capture(openCamera: true);
+    } on MissingPluginException {
+      /* Unit tests and unsupported platforms. */
     }
-    final hour = DateTime.now().hour;
-    final suggestedMeal = hour < 11 ? 0 : (hour < 17 ? 1 : 2);
-    final selected = await Navigator.push<int>(
-      context,
-      MaterialPageRoute(
-        builder: (_) =>
-            CaptureScreen(store: s, initialMeal: initialMeal ?? suggestedMeal),
-      ),
-    );
-    if (selected != null && mounted) {
-      setState(() {
-        page = 0;
-        now = DateTime.now();
-      });
+  }
+
+  Future<void> capture({int? initialMeal, bool openCamera = false}) async {
+    if (capturing) return;
+    capturing = true;
+    try {
+      if (s.demo) await s.setDemo(false);
+      if (openCamera && s.cloud.configured) {
+        try {
+          await s.connect();
+        } catch (_) {}
+      }
+      if (!mounted) return;
+      if (s.table == null) {
+        await openTables(context, s);
+        if (!openCamera || !mounted || s.table == null) return;
+      }
+      final suggestedMeal = mealAtCaptureTime(DateTime.now()) ?? 0;
+      final selected = await Navigator.push<int>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => CaptureScreen(
+            store: s,
+            initialMeal: initialMeal ?? suggestedMeal,
+            openCamera: openCamera,
+          ),
+        ),
+      );
+      if (selected != null && mounted) {
+        setState(() {
+          page = 0;
+          now = DateTime.now();
+        });
+      }
+    } finally {
+      capturing = false;
     }
   }
 
@@ -450,13 +479,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   List<Widget> mealSection(int meal, List<MealPost> posts) {
     if (posts.isEmpty) return [SliverToBoxAdapter(child: emptyMeal(meal))];
+    final rows = s.mealRows(posts);
+    final ordered = rows.expand((row) => row).whereType<MealPost>().toList();
     final paired =
-        posts.length > 1 &&
+        (posts.length > 1 || s.table!.memberIds.length > 1) &&
         MediaQuery.sizeOf(context).width >= 360 &&
         MediaQuery.textScalerOf(context).scale(1) < 1.3;
-    Widget card(int index) => PostCard(
-      key: ValueKey('post-${posts[index].id}'),
-      post: posts[index],
+    Widget card(MealPost post) => PostCard(
+      key: ValueKey('post-${post.id}'),
+      post: post,
       store: s,
       compact: true,
       tile: paired,
@@ -488,23 +519,27 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         ),
       ),
       SliverList.builder(
-        itemCount: paired ? (posts.length + 1) ~/ 2 : posts.length,
+        itemCount: paired ? rows.length : ordered.length,
         itemBuilder: (context, index) => Padding(
           padding: const EdgeInsets.fromLTRB(24, 0, 24, 10),
           child: paired
               ? Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(child: card(index * 2)),
+                    Expanded(
+                      child: rows[index][0] == null
+                          ? const SizedBox.shrink()
+                          : card(rows[index][0]!),
+                    ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: index * 2 + 1 < posts.length
-                          ? card(index * 2 + 1)
+                      child: rows[index][1] != null
+                          ? card(rows[index][1]!)
                           : const SizedBox.shrink(),
                     ),
                   ],
                 )
-              : card(index),
+              : card(ordered[index]),
         ),
       ),
     ];

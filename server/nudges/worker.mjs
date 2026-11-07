@@ -51,12 +51,15 @@ export default {
     }
     if (route === '/devices' && body.preferences !== undefined &&
       (!body.preferences || Array.isArray(body.preferences) ||
-        Object.keys(body.preferences).length !== 3 ||
+        Object.keys(body.preferences).some(key => !['nudge', 'post', 'comment', 'like'].includes(key)) ||
+        (body.preferences.like !== undefined && typeof body.preferences.like !== 'boolean') ||
         !['nudge', 'post', 'comment'].every(key => typeof body.preferences[key] === 'boolean'))) {
       return problem(400, 'invalid_request');
     }
-    if (route === '/activity' && (!['post', 'comment'].includes(body.kind)
-      || !validTable(body.postId) || (body.kind === 'comment' && !validTable(body.commentId)))) {
+    if (route === '/activity' && (!['post', 'comment', 'like'].includes(body.kind)
+      || !validTable(body.postId) || (body.kind === 'comment' && !validTable(body.commentId))
+      || (body.kind === 'like' && (typeof body.reactionId !== 'string' ||
+        !/^[A-Za-z0-9_-]{1,150}$/.test(body.reactionId))))) {
       return problem(400, 'invalid_request');
     }
     const authorization = request.headers.get('authorization') || '';
@@ -97,14 +100,20 @@ export default {
         const post = await read(base, ['authorId', 'authorName', 'meal', 'createdAt', 'deleting']);
         if (!post || post.deleting?.booleanValue) return problem(403, 'forbidden');
         const source = body.kind === 'comment'
-          ? await read(`${base}/comments/${body.commentId}`, ['authorId', 'authorName', 'createdAt']) : post;
+          ? await read(`${base}/comments/${body.commentId}`, ['authorId', 'authorName', 'createdAt'])
+          : body.kind === 'like'
+            ? await read(`${base}/reactions/${body.reactionId}`, ['userId', 'kind', 'createdAt']) : post;
         const created = Date.parse(source?.createdAt?.timestampValue);
-        if (source?.authorId?.stringValue !== uid || !Number.isFinite(created)
+        if ((body.kind === 'like' ? source?.userId?.stringValue : source?.authorId?.stringValue) !== uid || !Number.isFinite(created)
           || created < Date.now() - day || created > Date.now() + 60000) return problem(403, 'forbidden');
+        if (body.kind === 'like' && (!['heart', 'yum'].includes(source.kind?.stringValue)
+          || body.reactionId !== `${uid}_${source.kind.stringValue}`)) return problem(403, 'forbidden');
         // Recipients and copy come exclusively from authenticated stored records.
         event = {
           kind: body.kind, postId: body.postId,
           commentId: body.kind === 'comment' ? body.commentId : null,
+          reactionId: body.kind === 'like' ? body.reactionId : null,
+          reactionKind: body.kind === 'like' ? source.kind.stringValue : null,
           recipientId: post.authorId?.stringValue,
           authorName: String(source.authorName?.stringValue || '식탁 멤버').slice(0, 24),
           meal: Number(post.meal?.integerValue),
@@ -139,7 +148,7 @@ export class NudgeRegistry {
         if (oldOwner && oldOwner !== data.uid) await tx.delete(`user:${oldOwner}`);
         await tx.put(tokenKey, data.uid);
         await tx.put(key, {token: data.token, environment: data.environment, seen: Date.now(),
-          preferences: data.preferences ?? {nudge: true, post: false, comment: false}});
+          preferences: data.preferences ?? {nudge: true, post: false, comment: false, like: false}});
       });
       return reply(200, {enabled: true});
     }
@@ -159,7 +168,7 @@ export class NudgeRegistry {
     const activity = route === '/activity';
     const kind = activity ? data.kind : 'nudge';
     const recipients = [...new Set(data.members)].filter(uid => uid !== data.uid
-      && (kind !== 'comment' || uid === data.recipientId));
+      && (!['comment', 'like'].includes(kind) || uid === data.recipientId));
     const devices = [];
     for (const uid of recipients) {
       const device = await this.storage.get(`user:${uid}`);
@@ -168,7 +177,7 @@ export class NudgeRegistry {
     }
     if (!devices.length) return activity ? reply(200, {accepted: 0}) : problem(404, 'no_devices');
     if (activity) {
-      const requestKey = `request:activity:${data.tableId}:${data.postId}:${kind}:${data.commentId ?? ''}`;
+      const requestKey = `request:activity:${data.tableId}:${data.postId}:${kind}:${data.commentId ?? data.reactionId ?? ''}`;
       const reserved = await this.storage.transaction(async tx => {
         const previous = await tx.get(requestKey);
         if (previous && previous.expires > now) {
@@ -211,10 +220,12 @@ export class NudgeRegistry {
       const jwt = await providerToken(this.env);
       const date = new Date(now + 9 * 3600000).toISOString().slice(0, 10);
       const collapse = await hash(data.kind
-        ? `${data.tableId}:${data.postId}:${data.kind}:${data.commentId ?? ''}`
+        ? `${data.tableId}:${data.postId}:${data.kind}:${data.commentId ?? data.reactionId ?? ''}`
         : `${data.tableId}:${date}:${data.meal}`);
       const alert = data.kind === 'post'
         ? {title: `${data.authorName}님이 ${meals[data.meal] ?? '밥'} 사진을 올렸어요`, body: '우리 식탁에서 오늘의 한 끼를 확인해 봐요.'}
+        : data.kind === 'like'
+          ? {title: '내 밥 사진에 새 반응이 도착했어요', body: data.reactionKind === 'heart' ? '식탁 멤버가 좋아요를 보냈어요.' : '식탁 멤버가 맛있겠다는 반응을 남겼어요.'}
         : data.kind === 'comment'
           ? {title: '내 밥 사진에 새 댓글이 달렸어요', body: `${data.authorName}님이 이야기를 남겼어요.`}
           : {title: `${meals[data.meal]} 뭐 먹어!?`, body: '한 끼 사진으로 안부를 전해줘.'};
@@ -228,7 +239,7 @@ export class NudgeRegistry {
               'apns-expiration': String(Math.floor(now / 1000) + 3600), 'apns-collapse-id': collapse},
             body: JSON.stringify({aps: {alert, sound: 'default', 'thread-id': data.tableId},
               tableId: data.tableId, meal: data.meal,
-              ...(data.kind ? {kind: data.kind, postId: data.postId, commentId: data.commentId} : {})}),
+              ...(data.kind ? {kind: data.kind, postId: data.postId, commentId: data.commentId, reactionId: data.reactionId} : {})}),
           });
           if (response.status === 200) return 1;
           const error = await response.json().catch(() => ({}));

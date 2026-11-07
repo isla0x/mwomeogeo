@@ -30,13 +30,16 @@ class MealNudges extends ChangeNotifier {
   bool get postsEnabled => preferences.getBool('postNotifications') ?? false;
   bool get commentsEnabled =>
       preferences.getBool('commentNotifications') ?? false;
-  bool get anyEnabled => enabled || postsEnabled || commentsEnabled;
+  bool get likesEnabled => preferences.getBool('likeNotifications') ?? false;
+  bool get anyEnabled =>
+      enabled || postsEnabled || commentsEnabled || likesEnabled;
   bool busy = false;
   bool _flushing = false;
   Map<String, bool> get notificationPreferences => {
     'nudge': enabled,
     'post': postsEnabled,
     'comment': commentsEnabled,
+    'like': likesEnabled,
   };
   void Function(String)? onOpen;
 
@@ -92,6 +95,7 @@ class MealNudges extends ChangeNotifier {
       'nudge' => 'mealNudges',
       'post' => 'postNotifications',
       'comment' => 'commentNotifications',
+      'like' => 'likeNotifications',
       _ => throw ArgumentError.value(kind, 'kind'),
     };
     final next = {...notificationPreferences, kind: value};
@@ -132,6 +136,7 @@ class MealNudges extends ChangeNotifier {
           'mealNudges',
           'postNotifications',
           'commentNotifications',
+          'likeNotifications',
         ]) {
           await preferences.setBool(key, false);
         }
@@ -181,6 +186,7 @@ class MealNudges extends ChangeNotifier {
     String tableId,
     String postId, {
     String? commentId,
+    String? reactionId,
   }) async {
     try {
       final pending = preferences.getStringList('activityOutbox') ?? [];
@@ -188,7 +194,10 @@ class MealNudges extends ChangeNotifier {
         jsonEncode({
           'tableId': tableId,
           'postId': postId,
-          'kind': commentId == null ? 'post' : 'comment',
+          'kind': reactionId != null
+              ? 'like'
+              : (commentId == null ? 'post' : 'comment'),
+          'reactionId': ?reactionId,
           'commentId': ?commentId,
           'queuedAt': DateTime.now().millisecondsSinceEpoch,
         }),

@@ -475,7 +475,12 @@ class AppOption extends StatelessWidget {
   }
 }
 
-Future<bool?> confirmDelete(BuildContext context) => showDialog<bool>(
+Future<bool?> confirmDelete(
+  BuildContext context, {
+  String title = '이 기록을 삭제할까요?',
+  String description = '식사 사진과 댓글이 함께 사라져요.\n삭제한 기록은 되돌릴 수 없어요.',
+  String action = '삭제',
+}) => showDialog<bool>(
   context: context,
   barrierColor: ink.withValues(alpha: .30),
   builder: (context) => Dialog(
@@ -502,15 +507,9 @@ Future<bool?> confirmDelete(BuildContext context) => showDialog<bool>(
               child: const Icon(CupertinoIcons.trash, color: cherry, size: 22),
             ),
             const SizedBox(height: 20),
-            Text(
-              '이 기록을 삭제할까요?',
-              style: type(20, weight: FontWeight.w600, spacing: -.7),
-            ),
+            Text(title, style: type(20, weight: FontWeight.w600, spacing: -.7)),
             const SizedBox(height: 10),
-            Text(
-              '식사 사진과 댓글이 함께 사라져요.\n삭제한 기록은 되돌릴 수 없어요.',
-              style: type(13, color: muted, height: 1.7),
-            ),
+            Text(description, style: type(13, color: muted, height: 1.7)),
             const SizedBox(height: 26),
             Row(
               children: [
@@ -531,7 +530,7 @@ Future<bool?> confirmDelete(BuildContext context) => showDialog<bool>(
                 const SizedBox(width: 10),
                 Expanded(
                   child: PrimaryButton(
-                    '삭제',
+                    action,
                     onPressed: () => Navigator.pop(context, true),
                   ),
                 ),

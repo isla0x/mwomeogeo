@@ -109,6 +109,7 @@ class CloudApi {
           doc.id,
           d['name'] as String,
           memberCount: (d['memberIds'] as List).length,
+          memberIds: List<String>.from(d['memberIds'] as List),
           inviteCode: d['inviteCode'] as String,
         );
       }).toList()..sort((a, b) => a.name.compareTo(b.name));
@@ -158,6 +159,13 @@ class CloudApi {
       'updatedAt': FieldValue.serverTimestamp(),
     });
     return id;
+  });
+  Future<void> leaveTable(DiningTable table) => _guard(() async {
+    await _db.collection('tables').doc(table.id).update({
+      'memberIds': FieldValue.arrayRemove([userId]),
+      'joinCode': table.inviteCode,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
   });
   CollectionReference<Map<String, dynamic>> _postCollection(String tableId) =>
       _db.collection('tables').doc(tableId).collection('posts');
@@ -304,17 +312,23 @@ class CloudApi {
     await batch.commit();
     return result;
   });
-  Future<void> react(MealPost post, String kind) => _guard(() async {
+  Future<String?> react(MealPost post, String kind) => _guard(() async {
     final ref = _postCollection(post.tableIds.single).doc(post.id);
     final reaction = ref.collection('reactions').doc('${userId}_$kind');
     final batch = _db.batch();
-    if (post.reactions.contains('$userId:$kind')) {
+    final removing = post.reactions.contains('$userId:$kind');
+    if (removing) {
       batch.delete(reaction);
     } else {
-      batch.set(reaction, {'userId': userId, 'kind': kind});
+      batch.set(reaction, {
+        'userId': userId,
+        'kind': kind,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
     }
     batch.update(ref, {'updatedAt': FieldValue.serverTimestamp()});
     await batch.commit();
+    return removing ? null : reaction.id;
   });
   Future<String> comment(MealPost post, String body) => _guard(() async {
     final ref = _postCollection(post.tableIds.single).doc(post.id);

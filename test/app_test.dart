@@ -211,7 +211,11 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      final ordered = store.postsOn(DateTime.now());
+      final ordered = store
+          .mealRows(store.postsOn(DateTime.now(), meal: 0))
+          .expand((row) => row)
+          .whereType<MealPost>()
+          .toList();
       final first = find.byKey(ValueKey('post-${ordered[0].id}'));
       final second = find.byKey(ValueKey('post-${ordered[1].id}'));
       final third = find.byKey(ValueKey('post-${ordered[2].id}'));
@@ -283,9 +287,17 @@ void main() {
       await tester.runAsync(
         () => precacheImage(FileImage(source), key.currentContext!),
       );
-      await tester.tap(find.text('기존 사진 고르기'));
+      await tester.runAsync(() async {
+        await tester.tap(find.text('기존 사진 고르기'));
+        for (var i = 0; i < 300; i++) {
+          await tester.pump();
+          if (find.text('사진 바꾸기').evaluate().isNotEmpty) break;
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        }
+      });
       await tester.pumpAndSettle();
       expect(find.text('사진 바꾸기'), findsOneWidget);
+      expect(tester.getTopLeft(find.text('올리기')).dy, lessThan(100));
       await tester.enterText(find.byType(TextField), '바쁜 날에도 든든하게 한 그릇.');
       await tester.pump();
       await tester.tap(find.text('오늘의 한마디'));
@@ -301,9 +313,9 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('바쁜 날에도 든든하게 한 그릇.'), findsOneWidget);
 
-      await tester.ensureVisible(find.text('식탁에 남기기'));
+      await tester.ensureVisible(find.text('올리기'));
       await tester.runAsync(() async {
-        await tester.tap(find.text('식탁에 남기기'));
+        await tester.tap(find.text('올리기'));
         for (var i = 0; i < 100 && store.localPosts.isEmpty; i++) {
           await Future<void>.delayed(const Duration(milliseconds: 10));
         }

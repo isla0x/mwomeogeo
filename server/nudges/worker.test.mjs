@@ -212,3 +212,25 @@ test('nudge route cannot forge activity payloads or bypass its consent category'
   assert.equal(pushes[0].payload.kind, undefined);
   assert.equal(pushes[0].payload.aps.alert.title, '점심 뭐 먹어!?');
 });
+
+test('likes notify only the opted-in photo owner; duplicate/retracted/forged reactions do not push', async () => {
+  await setup(); members.push('third');
+  records.set('p1', record('receiver'));
+  records.set('p1/reactions/sender_heart', {
+    userId: {stringValue: 'sender'}, kind: {stringValue: 'heart'},
+    createdAt: {timestampValue: new Date().toISOString()},
+  });
+  await register('receiver', {nudge: false, post: false, comment: false, like: true});
+  await register('third', {nudge: false, post: false, comment: false, like: true}, 'c'.repeat(64));
+  const response = await activity('like', {reactionId: 'sender_heart', recipientId: 'third'});
+  assert.equal(response.status, 200);
+  assert.equal(pushes.length, 1);
+  assert.ok(pushes[0].url.endsWith('a'.repeat(64)));
+  assert.equal(pushes[0].payload.kind, 'like');
+  await activity('like', {reactionId: 'sender_heart'});
+  assert.equal(pushes.length, 1);
+  assert.equal((await activity('like', {reactionId: 'other_heart'})).status, 403);
+  records.delete('p1/reactions/sender_heart');
+  assert.equal((await activity('like', {reactionId: 'sender_heart'})).status, 403);
+  assert.equal(pushes.length, 1);
+});
