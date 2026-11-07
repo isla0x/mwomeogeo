@@ -37,7 +37,7 @@ async function smallBody(request) {
 export default {
   async fetch(request, env) {
     const route = new URL(request.url).pathname;
-    if (request.method !== 'POST' || !['/devices', '/disable', '/nudge'].includes(route)) {
+    if (request.method !== 'POST' || !['/devices', '/disable', '/nudge', '/activity'].includes(route)) {
       return problem(404, 'not_found');
     }
     let body;
@@ -47,6 +47,16 @@ export default {
       || !['production', 'sandbox'].includes(body.environment))) return problem(400, 'invalid_request');
     if (route === '/nudge' && (!Number.isInteger(body.meal) || body.meal < 0 || body.meal > 2
       || typeof body.requestId !== 'string' || !/^[a-f0-9-]{36}$/.test(body.requestId))) {
+      return problem(400, 'invalid_request');
+    }
+    if (route === '/devices' && body.preferences !== undefined &&
+      (!body.preferences || Array.isArray(body.preferences) ||
+        Object.keys(body.preferences).length !== 3 ||
+        !['nudge', 'post', 'comment'].every(key => typeof body.preferences[key] === 'boolean'))) {
+      return problem(400, 'invalid_request');
+    }
+    if (route === '/activity' && (!['post', 'comment'].includes(body.kind)
+      || !validTable(body.postId) || (body.kind === 'comment' && !validTable(body.commentId)))) {
       return problem(400, 'invalid_request');
     }
     const authorization = request.headers.get('authorization') || '';
@@ -74,9 +84,39 @@ export default {
       const table = await verified.json();
       const members = table.fields?.memberIds?.arrayValue?.values?.map(x => x.stringValue);
       if (!Array.isArray(members) || members.length > 20 || !members.includes(uid)) return problem(403, 'forbidden');
+      let event = {};
+      if (route === '/activity') {
+        const base = `https://firestore.googleapis.com/v1/projects/${project}/databases/(default)/documents/tables/${body.tableId}/posts/${body.postId}`;
+        const read = async (url, fields) => {
+          const query = fields.map(field => `mask.fieldPaths=${field}`).join('&');
+          const response = await fetch(`${url}?${query}`, {headers: {authorization}, redirect: 'manual',
+            signal: AbortSignal.timeout(10000)});
+          if (!response.ok) return null;
+          return (await response.json()).fields;
+        };
+        const post = await read(base, ['authorId', 'authorName', 'meal', 'createdAt', 'deleting']);
+        if (!post || post.deleting?.booleanValue) return problem(403, 'forbidden');
+        const source = body.kind === 'comment'
+          ? await read(`${base}/comments/${body.commentId}`, ['authorId', 'authorName', 'createdAt']) : post;
+        const created = Date.parse(source?.createdAt?.timestampValue);
+        if (source?.authorId?.stringValue !== uid || !Number.isFinite(created)
+          || created < Date.now() - day || created > Date.now() + 60000) return problem(403, 'forbidden');
+        // Recipients and copy come exclusively from authenticated stored records.
+        event = {
+          kind: body.kind, postId: body.postId,
+          commentId: body.kind === 'comment' ? body.commentId : null,
+          recipientId: post.authorId?.stringValue,
+          authorName: String(source.authorName?.stringValue || '식탁 멤버').slice(0, 24),
+          meal: Number(post.meal?.integerValue),
+        };
+      }
       const id = env.NUDGES.idFromName('push-registry');
       return await env.NUDGES.get(id).fetch(new Request(`https://private${route}`, {
-        method: 'POST', body: JSON.stringify({...body, uid, members})}));
+        method: 'POST', body: JSON.stringify({tableId: body.tableId, uid, members,
+          ...(route === '/devices' ? {token: body.token, environment: body.environment,
+            preferences: body.preferences} : {}),
+          ...(route === '/nudge' ? {meal: body.meal, requestId: body.requestId} : {}),
+          ...event})}));
     } catch { return problem(503, 'unavailable'); }
   },
 };
@@ -98,7 +138,8 @@ export class NudgeRegistry {
         const oldOwner = await tx.get(tokenKey);
         if (oldOwner && oldOwner !== data.uid) await tx.delete(`user:${oldOwner}`);
         await tx.put(tokenKey, data.uid);
-        await tx.put(key, {token: data.token, environment: data.environment, seen: Date.now()});
+        await tx.put(key, {token: data.token, environment: data.environment, seen: Date.now(),
+          preferences: data.preferences ?? {nudge: true, post: false, comment: false}});
       });
       return reply(200, {enabled: true});
     }
@@ -110,18 +151,38 @@ export class NudgeRegistry {
       });
       return reply(200, {enabled: false});
     }
-    if (route !== '/nudge') return problem(404, 'not_found');
+    if (!['/nudge', '/activity'].includes(route)) return problem(404, 'not_found');
     if (!this.env.APNS_PRIVATE_KEY || !this.env.APNS_KEY_ID || !this.env.APNS_TEAM_ID) {
       return problem(503, 'not_configured');
     }
     const now = Date.now();
-    const recipients = [...new Set(data.members)].filter(uid => uid !== data.uid);
+    const activity = route === '/activity';
+    const kind = activity ? data.kind : 'nudge';
+    const recipients = [...new Set(data.members)].filter(uid => uid !== data.uid
+      && (kind !== 'comment' || uid === data.recipientId));
     const devices = [];
     for (const uid of recipients) {
       const device = await this.storage.get(`user:${uid}`);
-      if (device && device.seen > now - 30 * day) devices.push({uid, ...device});
+      const enabled = device?.preferences?.[kind] ?? (kind === 'nudge');
+      if (device && enabled && device.seen > now - 30 * day) devices.push({uid, ...device});
     }
-    if (!devices.length) return problem(404, 'no_devices');
+    if (!devices.length) return activity ? reply(200, {accepted: 0}) : problem(404, 'no_devices');
+    if (activity) {
+      const requestKey = `request:activity:${data.tableId}:${data.postId}:${kind}:${data.commentId ?? ''}`;
+      const reserved = await this.storage.transaction(async tx => {
+        const previous = await tx.get(requestKey);
+        if (previous && previous.expires > now) {
+          return previous.result ? reply(previous.status, previous.result) : problem(409, 'pending');
+        }
+        await tx.put(requestKey, {expires: now + 2 * day});
+        return null;
+      });
+      if (reserved) return reserved;
+      const sending = this.deliver(data, devices, requestKey, null, now);
+      if (await this.storage.getAlarm() === null) await this.storage.setAlarm(now + day);
+      this.ctx.waitUntil(sending);
+      return await sending;
+    }
     const requestKey = `request:${data.uid}:${data.requestId}`;
     const cooldownKey = `cooldown:${data.tableId}:${data.meal}`;
     const reserved = await this.storage.transaction(async tx => {
@@ -149,7 +210,14 @@ export class NudgeRegistry {
     try {
       const jwt = await providerToken(this.env);
       const date = new Date(now + 9 * 3600000).toISOString().slice(0, 10);
-      const collapse = await hash(`${data.tableId}:${date}:${data.meal}`);
+      const collapse = await hash(data.kind
+        ? `${data.tableId}:${data.postId}:${data.kind}:${data.commentId ?? ''}`
+        : `${data.tableId}:${date}:${data.meal}`);
+      const alert = data.kind === 'post'
+        ? {title: `${data.authorName}님이 ${meals[data.meal] ?? '밥'} 사진을 올렸어요`, body: '우리 식탁에서 오늘의 한 끼를 확인해 봐요.'}
+        : data.kind === 'comment'
+          ? {title: '내 밥 사진에 새 댓글이 달렸어요', body: `${data.authorName}님이 이야기를 남겼어요.`}
+          : {title: `${meals[data.meal]} 뭐 먹어!?`, body: '한 끼 사진으로 안부를 전해줘.'};
       const results = await Promise.all(devices.map(async device => {
         try {
           const host = device.environment === 'sandbox' ? 'api.sandbox.push.apple.com' : 'api.push.apple.com';
@@ -158,9 +226,9 @@ export class NudgeRegistry {
             headers: {authorization: `bearer ${jwt}`, 'apns-topic': topic,
               'apns-push-type': 'alert', 'apns-priority': '10', 'content-type': 'application/json',
               'apns-expiration': String(Math.floor(now / 1000) + 3600), 'apns-collapse-id': collapse},
-            body: JSON.stringify({aps: {alert: {title: `${meals[data.meal]} 뭐 먹어!?`,
-              body: '한 끼 사진으로 안부를 전해줘.'}, sound: 'default', 'thread-id': data.tableId},
-              tableId: data.tableId, meal: data.meal}),
+            body: JSON.stringify({aps: {alert, sound: 'default', 'thread-id': data.tableId},
+              tableId: data.tableId, meal: data.meal,
+              ...(data.kind ? {kind: data.kind, postId: data.postId, commentId: data.commentId} : {})}),
           });
           if (response.status === 200) return 1;
           const error = await response.json().catch(() => ({}));
@@ -185,8 +253,8 @@ export class NudgeRegistry {
       const status = accepted ? 200 : 502;
       const result = accepted ? {accepted} : {error: 'delivery_failed'};
       await this.storage.transaction(async tx => {
-        await tx.put(requestKey, {tableId: data.tableId, meal: data.meal, expires: now + day, status, result});
-        if (!accepted && !uncertain) {
+        await tx.put(requestKey, {tableId: data.tableId, meal: data.meal, expires: now + (data.kind ? 2 : 1) * day, status, result});
+        if (!accepted && !uncertain && cooldownKey) {
           const cooldown = await tx.get(cooldownKey);
           if (cooldown?.requestKey === requestKey) await tx.delete(cooldownKey);
         }
@@ -205,6 +273,11 @@ export class NudgeRegistry {
         }
         if (entries.size < 128) break;
       }
+    }
+    // Keep sweeping while two-day activity deduplication records remain.
+    if ((await this.storage.list({prefix: 'request:', limit: 1})).size ||
+        (await this.storage.list({prefix: 'cooldown:', limit: 1})).size) {
+      await this.storage.setAlarm(Date.now() + day);
     }
   }
 }

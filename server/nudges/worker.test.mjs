@@ -20,9 +20,9 @@ const makeToken = uid => `header.${Buffer.from(JSON.stringify({sub: uid, aud: 'm
 const request = (path, body, uid = 'sender') => new Request(`https://nudges.test${path}`, {
   method: 'POST', headers: uid ? {authorization: `Bearer ${makeToken(uid)}`} : {}, body: JSON.stringify(body)});
 const id = n => `${String(n).padStart(8, '0')}-0000-4000-8000-000000000000`;
-let env, storage, pushes, members, firestoreStatus;
+let env, storage, pushes, members, firestoreStatus, records;
 async function setup() {
-  storage = new Storage(); pushes = []; members = ['sender', 'receiver']; firestoreStatus = 200;
+  storage = new Storage(); pushes = []; members = ['sender', 'receiver']; firestoreStatus = 200; records = new Map();
   const signing = await crypto.subtle.generateKey({name: 'ECDSA', namedCurve: 'P-256'}, true, ['sign', 'verify']);
   const der = await crypto.subtle.exportKey('pkcs8', signing.privateKey);
   env = {APNS_PRIVATE_KEY: `-----BEGIN PRIVATE KEY-----\n${Buffer.from(der).toString('base64')}\n-----END PRIVATE KEY-----`,
@@ -31,6 +31,10 @@ async function setup() {
   env.NUDGES = {idFromName: value => value, get: () => ({fetch: request => registry.fetch(request)})};
   globalThis.fetch = async (url, options) => {
     assert.equal(options.redirect, 'manual', 'Workers must not forward credentials on redirects');
+    if (url.includes('/posts/')) {
+      const path = new URL(url).pathname.split('/posts/')[1];
+      return records.has(path) ? Response.json({fields: records.get(path)}) : Response.json({}, {status: 404});
+    }
     if (url.startsWith('https://firestore.googleapis.com/')) return Response.json({
       fields: {memberIds: {arrayValue: {values: members.map(uid => ({stringValue: uid}))}}}}, {status: firestoreStatus});
     assert.match(url, /^https:\/\/api(\.sandbox)?\.push\.apple\.com\/3\/device\/[a-f0-9]+$/);
@@ -123,4 +127,88 @@ test('upstream redirects never authenticate or count as accepted notifications',
     ? Promise.resolve(new Response(null, {status: 302, headers: {location: 'https://redirect.invalid'}}))
     : normal(url, options);
   assert.equal((await send()).status, 502);
+});
+
+const activity = (kind = 'post', extra = {}, uid = 'sender') => worker.fetch(request('/activity', {
+  tableId: 'table', postId: 'p1', kind, ...(kind === 'comment' ? {commentId: 'c1'} : {}), ...extra,
+}, uid), env);
+const record = (authorId, extra = {}) => ({authorId: {stringValue: authorId},
+  authorName: {stringValue: '하루'}, meal: {integerValue: '1'},
+  createdAt: {timestampValue: new Date().toISOString()}, ...extra});
+const register = (uid, preferences, token = 'a'.repeat(64)) => worker.fetch(request('/devices', {
+  ...device(token), preferences,
+}, uid), env);
+
+test('post alerts require explicit opt-in, use stored copy, exclude self and deduplicate concurrent events', async () => {
+  await setup();
+  records.set('p1', record('sender'));
+  await register('sender', {nudge: false, post: true, comment: true}, 'b'.repeat(64));
+  await worker.fetch(request('/devices', device(), 'receiver'), env); // Legacy consent is nudge only.
+  assert.deepEqual(await (await activity()).json(), {accepted: 0});
+  await register('receiver', {nudge: false, post: true, comment: false});
+  const results = await Promise.all([activity('post', {authorName: 'forged', recipientId: 'outsider'}), activity()]);
+  assert.ok(results.every(result => [200, 409].includes(result.status)));
+  assert.equal(pushes.length, 1);
+  assert.equal(pushes[0].payload.aps.alert.title, '하루님이 점심 사진을 올렸어요');
+  assert.equal(pushes[0].payload.kind, 'post');
+  assert.ok(pushes[0].url.endsWith('a'.repeat(64)));
+  await activity();
+  assert.equal(pushes.length, 1);
+  assert.equal((await send()).status, 404); // Post consent does not enable nudges.
+});
+
+test('comment alerts go only to the post owner, never the commenter or other members', async () => {
+  await setup(); members.push('third');
+  records.set('p1', record('receiver'));
+  records.set('p1/comments/c1', record('sender'));
+  await register('receiver', {nudge: false, post: false, comment: true});
+  await register('third', {nudge: true, post: true, comment: true}, 'c'.repeat(64));
+  await activity('comment', {recipientId: 'third', authorName: 'forged'});
+  assert.equal(pushes.length, 1);
+  assert.ok(pushes[0].url.endsWith('a'.repeat(64)));
+  assert.equal(pushes[0].payload.aps.alert.title, '내 밥 사진에 새 댓글이 달렸어요');
+  assert.equal(pushes[0].payload.commentId, 'c1');
+  assert.equal(pushes[0].payload.aps.alert.body, '하루님이 이야기를 남겼어요.');
+  records.set('p1/comments/self', record('receiver'));
+  assert.deepEqual(await (await activity('comment', {commentId: 'self'}, 'receiver')).json(), {accepted: 0});
+  assert.equal(pushes.length, 1);
+});
+
+test('activity verifies author, record existence, age, membership, and path boundaries', async () => {
+  await setup(); await register('receiver', {nudge: true, post: true, comment: true});
+  assert.equal((await activity()).status, 403);
+  records.set('p1', record('receiver'));
+  assert.equal((await activity()).status, 403);
+  records.set('p1', record('sender', {createdAt: {timestampValue: new Date(Date.now() - 86400001).toISOString()}}));
+  assert.equal((await activity()).status, 403);
+  records.set('p1', record('sender', {deleting: {booleanValue: true}}));
+  assert.equal((await activity()).status, 403);
+  records.set('p1', record('receiver')); records.set('p1/comments/c1', record('third'));
+  assert.equal((await activity('comment')).status, 403);
+  assert.equal((await activity('post', {postId: '../p1'})).status, 400);
+  assert.equal((await activity('comment', {commentId: '../c1'})).status, 400);
+  assert.equal((await activity('post', {}, 'outsider')).status, 403);
+  assert.equal(pushes.length, 0);
+});
+
+test('independent preferences update and disable activity delivery without affecting nudge consent', async () => {
+  await setup(); records.set('p1', record('sender'));
+  assert.equal((await register('receiver', {post: 'yes'})).status, 400);
+  await register('receiver', {nudge: true, post: true, comment: false});
+  await register('receiver', {nudge: true, post: false, comment: true});
+  assert.deepEqual(await (await activity()).json(), {accepted: 0});
+  await send(); assert.equal(pushes.length, 1);
+  await worker.fetch(request('/disable', {tableId: 'table'}, 'receiver'), env);
+  records.set('p1', record('receiver')); records.set('p1/comments/c1', record('sender'));
+  assert.deepEqual(await (await activity('comment')).json(), {accepted: 0});
+  assert.equal(pushes.length, 1);
+});
+
+test('nudge route cannot forge activity payloads or bypass its consent category', async () => {
+  await setup(); await register('receiver', {nudge: true, post: false, comment: false});
+  const result = await worker.fetch(request('/nudge', {tableId: 'table', meal: 1, requestId: id(9),
+    kind: 'comment', recipientId: 'receiver', authorName: 'forged', postId: 'fake'}), env);
+  assert.equal(result.status, 200);
+  assert.equal(pushes[0].payload.kind, undefined);
+  assert.equal(pushes[0].payload.aps.alert.title, '점심 뭐 먹어!?');
 });

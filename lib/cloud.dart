@@ -316,10 +316,11 @@ class CloudApi {
     batch.update(ref, {'updatedAt': FieldValue.serverTimestamp()});
     await batch.commit();
   });
-  Future<void> comment(MealPost post, String body) => _guard(() async {
+  Future<String> comment(MealPost post, String body) => _guard(() async {
     final ref = _postCollection(post.tableIds.single).doc(post.id);
     final batch = _db.batch();
-    batch.set(ref.collection('comments').doc(), {
+    final comment = ref.collection('comments').doc();
+    batch.set(comment, {
       'authorId': userId,
       'authorName': displayName ?? '나',
       'body': body,
@@ -327,6 +328,7 @@ class CloudApi {
     });
     batch.update(ref, {'updatedAt': FieldValue.serverTimestamp()});
     await batch.commit();
+    return comment.id;
   });
   Future<void> deletePost(MealPost post) => _guard(() async {
     final ref = _postCollection(post.tableIds.single).doc(post.id);

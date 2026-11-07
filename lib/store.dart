@@ -184,6 +184,9 @@ class MealStore extends ChangeNotifier {
         name,
       );
       remotePosts.insertAll(0, delivered);
+      for (final post in delivered) {
+        await nudges.activity(post.tableIds.single, post.id);
+      }
       // A completed delivery stays successful even if reloading the feed fails.
       try {
         await refresh();
@@ -251,7 +254,12 @@ class MealStore extends ChangeNotifier {
 
   Future<void> addComment(MealPost post, String text) async {
     if (post.isCloud) {
-      await cloud.comment(post, text);
+      final commentId = await cloud.comment(post, text);
+      await nudges.activity(
+        post.tableIds.single,
+        post.id,
+        commentId: commentId,
+      );
       await refresh();
       return;
     }

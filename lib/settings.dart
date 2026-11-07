@@ -46,40 +46,40 @@ Future<void> openSettings(
         ),
         ListenableBuilder(
           listenable: store.nudges,
-          builder: (_, _) => AppOption(
-            label: '식사 알림 받기',
-            subtitle: store.nudges.busy
-                ? '알림 연결 중이에요'
-                : store.nudges.enabled
-                ? '상대의 밥 안부를 알림으로 받아요'
-                : '알림을 허용하면 상대의 밥 안부를 받아요',
-            icon: store.nudges.enabled
-                ? CupertinoIcons.bell_fill
-                : CupertinoIcons.bell,
-            selected: store.nudges.enabled,
-            onTap: store.nudges.busy
-                ? null
-                : () async {
-                    final table = store.table;
-                    if (table == null || !table.isCloud || store.demo) {
-                      toast(sheetContext, '함께 쓰는 식탁에서 알림을 받을 수 있어요.');
-                      return;
-                    }
-                    try {
-                      await store.nudges.setEnabled(
-                        table.id,
-                        !store.nudges.enabled,
-                      );
-                      if (sheetContext.mounted) {
-                        toast(
-                          sheetContext,
-                          store.nudges.enabled ? '식사 알림을 켰어요.' : '식사 알림을 껐어요.',
-                        );
-                      }
-                    } catch (e) {
-                      if (sheetContext.mounted) toast(sheetContext, '$e');
-                    }
-                  },
+          builder: (_, _) => Column(
+            children: [
+              for (final option in const [
+                ('nudge', '밥 안부 알림', '상대가 “뭐 먹어!?” 하고 물어보면 알려요'),
+                ('post', '새 사진 알림', '같은 식탁의 다른 사람이 밥 사진을 올리면 알려요'),
+                ('comment', '내 사진의 댓글 알림', '내 밥 사진에 다른 사람이 댓글을 남기면 알려요'),
+              ])
+                AppOption(
+                  label: option.$2,
+                  subtitle: store.nudges.busy ? '알림 연결 중이에요' : option.$3,
+                  icon: store.nudges.notificationPreferences[option.$1]!
+                      ? CupertinoIcons.bell_fill
+                      : CupertinoIcons.bell,
+                  selected: store.nudges.notificationPreferences[option.$1]!,
+                  onTap: store.nudges.busy
+                      ? null
+                      : () async {
+                          final table = store.table;
+                          if (table == null || !table.isCloud || store.demo) {
+                            toast(sheetContext, '함께 쓰는 식탁에서 알림을 받을 수 있어요.');
+                            return;
+                          }
+                          try {
+                            await store.nudges.setPreference(
+                              table.id,
+                              option.$1,
+                              !store.nudges.notificationPreferences[option.$1]!,
+                            );
+                          } catch (e) {
+                            if (sheetContext.mounted) toast(sheetContext, '$e');
+                          }
+                        },
+                ),
+            ],
           ),
         ),
         settingRow('사진첩에 자동 저장', '저장 안 함'),

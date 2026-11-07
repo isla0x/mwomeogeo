@@ -27,7 +27,17 @@ class MealNudges extends ChangeNotifier {
       endpoint!.scheme == 'https' &&
       endpoint!.host.isNotEmpty;
   bool get enabled => preferences.getBool('mealNudges') ?? false;
+  bool get postsEnabled => preferences.getBool('postNotifications') ?? false;
+  bool get commentsEnabled =>
+      preferences.getBool('commentNotifications') ?? false;
+  bool get anyEnabled => enabled || postsEnabled || commentsEnabled;
   bool busy = false;
+  bool _flushing = false;
+  Map<String, bool> get notificationPreferences => {
+    'nudge': enabled,
+    'post': postsEnabled,
+    'comment': commentsEnabled,
+  };
   void Function(String)? onOpen;
 
   Future<Map<String, dynamic>> _request(
@@ -74,17 +84,27 @@ class MealNudges extends ChangeNotifier {
     }
   }
 
-  Future<void> setEnabled(String tableId, bool value) async {
+  Future<void> setEnabled(String tableId, bool value) =>
+      setPreference(tableId, 'nudge', value);
+
+  Future<void> setPreference(String tableId, String kind, bool value) async {
+    final key = switch (kind) {
+      'nudge' => 'mealNudges',
+      'post' => 'postNotifications',
+      'comment' => 'commentNotifications',
+      _ => throw ArgumentError.value(kind, 'kind'),
+    };
+    final next = {...notificationPreferences, kind: value};
     if (busy) return;
     busy = true;
     notifyListeners();
     try {
-      if (value) {
-        await _register(tableId, ask: true);
+      if (next.values.any((value) => value)) {
+        await _register(tableId, ask: value, options: next);
       } else {
         await _request('/disable', {'tableId': tableId});
       }
-      await preferences.setBool('mealNudges', value);
+      await preferences.setBool(key, value);
     } on PlatformException {
       throw const CloudFailure('알림을 허용하지 않았어요. iPhone 설정에서 알림을 허용해 주세요.');
     } finally {
@@ -93,9 +113,13 @@ class MealNudges extends ChangeNotifier {
     }
   }
 
-  Future<void> _register(String tableId, {required bool ask}) async {
+  Future<void> _register(
+    String tableId, {
+    required bool ask,
+    Map<String, bool>? options,
+  }) async {
     if (!configured) throw const CloudFailure('식사 알림을 준비 중이에요. 다음 업데이트에서 만나요.');
-    if (!Platform.isIOS) {
+    if (defaultTargetPlatform != TargetPlatform.iOS) {
       throw const CloudFailure('지금은 iPhone에서 식사 알림을 받을 수 있어요.');
     }
     final device = await channel
@@ -104,19 +128,29 @@ class MealNudges extends ChangeNotifier {
     if (device == null) {
       if (!ask) {
         await _request('/disable', {'tableId': tableId});
-        await preferences.setBool('mealNudges', false);
+        for (final key in [
+          'mealNudges',
+          'postNotifications',
+          'commentNotifications',
+        ]) {
+          await preferences.setBool(key, false);
+        }
         notifyListeners();
         return;
       }
       throw const CloudFailure('알림을 허용하지 않았어요. iPhone 설정에서 알림을 허용해 주세요.');
     }
-    await _request('/devices', {'tableId': tableId, ...device});
+    await _request('/devices', {
+      'tableId': tableId,
+      ...device,
+      'preferences': options ?? notificationPreferences,
+    });
   }
 
   // Refresh APNs tokens after launch/resume, without prompting for permission.
   Future<void> restore(String? tableId) async {
     if (!configured ||
-        !Platform.isIOS ||
+        defaultTargetPlatform != TargetPlatform.iOS ||
         tableId == null ||
         tableId.startsWith('local-')) {
       return;
@@ -131,12 +165,64 @@ class MealNudges extends ChangeNotifier {
     if (opened?['tableId'] case final String id) {
       onOpen?.call(id);
     }
-    if (enabled && !busy) {
+    unawaited(flushActivities());
+    if (anyEnabled && !busy) {
       try {
         await _register(tableId, ask: false);
       } catch (_) {
         /* Retry next resume; never interrupt a meal. */
       }
+    }
+  }
+
+  // Persist after the Firestore commit; retry on the next launch/resume.
+  // Notification failures must never turn a successful post into a failed upload.
+  Future<void> activity(
+    String tableId,
+    String postId, {
+    String? commentId,
+  }) async {
+    try {
+      final pending = preferences.getStringList('activityOutbox') ?? [];
+      pending.add(
+        jsonEncode({
+          'tableId': tableId,
+          'postId': postId,
+          'kind': commentId == null ? 'post' : 'comment',
+          'commentId': ?commentId,
+          'queuedAt': DateTime.now().millisecondsSinceEpoch,
+        }),
+      );
+      await preferences.setStringList('activityOutbox', pending);
+      unawaited(flushActivities());
+    } catch (_) {
+      /* The meal/comment is already saved. */
+    }
+  }
+
+  Future<void> flushActivities() async {
+    if (_flushing || !configured) return;
+    _flushing = true;
+    try {
+      while (true) {
+        final pending = preferences.getStringList('activityOutbox') ?? [];
+        if (pending.isEmpty) break;
+        final entry = pending.first;
+        try {
+          final event = jsonDecode(entry) as Map<String, dynamic>;
+          final queuedAt = event.remove('queuedAt') as int;
+          if (DateTime.now().millisecondsSinceEpoch - queuedAt < 86400000) {
+            await _request('/activity', event);
+          }
+          final remaining = preferences.getStringList('activityOutbox') ?? [];
+          remaining.remove(entry);
+          await preferences.setStringList('activityOutbox', remaining);
+        } catch (_) {
+          break;
+        }
+      }
+    } finally {
+      _flushing = false;
     }
   }
 
