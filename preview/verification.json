@@ -1,10 +1,10 @@
 {
-  "date": "2026-10-21",
-  "app_version": "1.0.0+8",
+  "date": "2026-10-22",
+  "app_version": "1.0.0+11",
   "flutter": "3.47.7",
   "dart": "3.13.5",
-  "static_analysis": "passed: flutter analyze --no-pub on 5 changed lib files and test/app_test.dart, 0 diagnostics",
-  "normal_flutter_test": "passed: all 18 tests, including 7 UI tests",
+  "static_analysis": "passed: dart analyze lib/design.dart lib/main.dart, 0 diagnostics",
+  "normal_flutter_test": "passed: all 19 tests, including 8 UI tests",
   "checks": [
     "zero initial rooms",
     "first-room illustration",
@@ -25,7 +25,9 @@
     "delete cancellation preserves record; confirmation deletes",
     "blank nickname save disabled",
     "nickname save at 320x568, text scale 1.5, keyboard inset 250",
-    "photo selection sheet dismissal preserves draft"
+    "photo selection sheet dismissal preserves draft",
+    "Reading text and buttons enlarged by one more point",
+    "Meal nudge preview remains disabled and notification opens only an allowed table"
   ],
   "rendered_sizes": [
     "390x844 @2x",
@@ -34,9 +36,9 @@
   "firebase_rules_emulator": "58 checks passed on unchanged Spark rules in prior verification",
   "live_firebase_setup": "Anonymous auth and member-only Spark Firestore rules deployed; no billing account",
   "two_device_sharing": "requires installing updated build on iPhones",
-  "native_ios_build": "not built by agent for build 8",
+  "native_ios_build": "not built by agent for build 11",
   "physical_iphone_camera": "not tested for this release",
-  "standalone_engine_verification": "not rerun for build 8; normal Flutter tests passed",
+  "standalone_engine_verification": "not rerun for build 11; normal Flutter tests passed",
   "screenshots": "preview/*.png: Flutter-rendered fixture screens; first launch remains empty",
   "selected_asset": "assets/illustrations/first-table.png: isolated from approved mockup using image generation; imported in pubspec and rendered on first-room screen"
 }

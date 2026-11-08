@@ -58,3 +58,8 @@ node_modules/
 *service-account*.json
 *firebase-adminsdk*.json
 GoogleService-Info*.plist
+
+# Cloudflare local state and private environment variables
+.wrangler/
+.dev.vars
+.dev.vars.*

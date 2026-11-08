@@ -27,6 +27,44 @@ void main() {
     await directory.delete(recursive: true);
     store.dispose();
   });
+  test('deleting a legacy default room removes records permanently but preserves other rooms', () async {
+    SharedPreferences.setMockInitialValues({
+      'posts': jsonEncode([
+        MealPost(
+          id: 'legacy',
+          author: '나',
+          photo: 'asset:toast',
+          meal: 0,
+          date: DateTime.now(),
+          tableIds: ['local-couple'],
+        ).toJson(),
+      ]),
+    });
+    final prefs = await SharedPreferences.getInstance();
+    final legacy = MealStore(prefs, directory);
+    await legacy.load();
+    expect(legacy.localTables.map((t) => t.id), contains('local-couple'));
+    await legacy.createLocalTable('남길 식탁');
+    await legacy.removeTable(
+      legacy.localTables.firstWhere((t) => t.id == 'local-couple'),
+    );
+    final restored = MealStore(prefs, directory);
+    await restored.load();
+    expect(restored.localTables.map((t) => t.name), ['남길 식탁']);
+    expect(restored.localPosts, isEmpty);
+    await restored.removeTable(restored.localTables.single);
+    final empty = MealStore(prefs, directory);
+    await empty.load();
+    expect(empty.tables, isEmpty);
+    await empty.createLocalTable('다시 만든 식탁');
+    final again = MealStore(prefs, directory);
+    await again.load();
+    expect(again.tables.single.name, '다시 만든 식탁');
+    legacy.dispose();
+    restored.dispose();
+    empty.dispose();
+    again.dispose();
+  });
   test(
     'fresh install and old preview preference start with zero rooms',
     () async {

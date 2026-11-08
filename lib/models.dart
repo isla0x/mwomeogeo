@@ -24,11 +24,13 @@ class DiningTable {
     this.name, {
     this.memberCount = 1,
     this.inviteCode,
+    this.memberIds = const [],
   });
   final String id;
   final String name;
   final int memberCount;
   final String? inviteCode;
+  final List<String> memberIds;
   bool get isCloud => !id.startsWith('local-');
 }
 
@@ -116,3 +118,44 @@ List<MealPost> demoPosts(DateTime now) => [
       isDemo: true,
     ),
 ];
+
+// Membership order, never upload order, determines each person's seat.
+String mealAuthorKey(MealPost post) =>
+    post.isCloud ? (post.authorId ?? post.author) : post.author;
+List<List<MealPost?>> fixedMealRows(List<MealPost> posts, List<String> seats) {
+  final grouped = <String, List<MealPost>>{};
+  for (final post in posts) {
+    grouped.putIfAbsent(mealAuthorKey(post), () => []).add(post);
+  }
+  final order = [...seats.toSet()];
+  order.addAll(
+    grouped.keys.where((key) => !order.contains(key)).toList()..sort(),
+  );
+  for (final values in grouped.values) {
+    values.sort((a, b) => b.date.compareTo(a.date));
+  }
+  final rows = <List<MealPost?>>[];
+  for (var seat = 0; seat < order.length; seat += 2) {
+    final left = grouped[order[seat]] ?? <MealPost>[];
+    final right = seat + 1 < order.length
+        ? grouped[order[seat + 1]] ?? <MealPost>[]
+        : <MealPost>[];
+    final count = left.length > right.length ? left.length : right.length;
+    for (var row = 0; row < count; row++) {
+      rows.add([
+        row < left.length ? left[row] : null,
+        row < right.length ? right[row] : null,
+      ]);
+    }
+  }
+  return rows;
+}
+
+// Exact inclusive time windows requested by the user; gaps require a choice.
+int? mealAtCaptureTime(DateTime time) {
+  final minute = time.hour * 60 + time.minute;
+  if (minute >= 5 * 60 && minute <= 10 * 60) return 0;
+  if (minute >= 11 * 60 && minute <= 16 * 60) return 1;
+  if (minute >= 17 * 60 && minute <= 22 * 60) return 2;
+  return null;
+}

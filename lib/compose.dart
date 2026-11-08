@@ -1,5 +1,8 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+import 'package:image/image.dart' as img;
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -13,9 +16,11 @@ class CaptureScreen extends StatefulWidget {
     super.key,
     required this.store,
     required this.initialMeal,
+    this.openCamera = false,
   });
   final MealStore store;
   final int initialMeal;
+  final bool openCamera;
   @override
   State<CaptureScreen> createState() => _CaptureScreenState();
 }
@@ -25,6 +30,18 @@ class _CaptureScreenState extends State<CaptureScreen> {
   File? photo;
   bool busy = false;
   bool success = false;
+  bool needsMealChoice = false;
+  bool manualMeal = false;
+  @override
+  void initState() {
+    super.initState();
+    if (widget.openCamera) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) pick(ImageSource.camera);
+      });
+    }
+  }
+
   final caption = TextEditingController();
   late Set<String> recipients = {widget.store.tableId};
   @override
@@ -45,7 +62,25 @@ class _CaptureScreenState extends State<CaptureScreen> {
         requestFullMetadata: false,
       );
       if (selected != null && mounted) {
-        setState(() => photo = File(selected.path));
+        final file = File(selected.path);
+        DateTime? taken;
+        try {
+          if (await file.length() <= 10 * 1024 * 1024) {
+            taken = await compute(photoCaptureTime, await file.readAsBytes());
+          }
+        } catch (_) {
+          /* Metadata is optional. */
+        }
+        taken ??= source == ImageSource.camera ? DateTime.now() : null;
+        if (!mounted) return;
+        setState(() {
+          photo = File(selected.path);
+          if (taken != null && !manualMeal) {
+            final suggested = mealAtCaptureTime(taken);
+            needsMealChoice = suggested == null;
+            if (suggested != null) meal = suggested;
+          }
+        });
       }
     } catch (_) {
       if (mounted) {
@@ -62,7 +97,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
   }
 
   Future<void> save() async {
-    if (photo == null || recipients.isEmpty || busy) return;
+    if (photo == null || recipients.isEmpty || busy || needsMealChoice) return;
     setState(() => busy = true);
     try {
       await widget.store.saveMeal(
@@ -99,6 +134,40 @@ class _CaptureScreenState extends State<CaptureScreen> {
           style: type(17, weight: FontWeight.w500),
         ),
         centerTitle: true,
+        actions: [
+          if (!success)
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: TextButton(
+                onPressed:
+                    photo == null ||
+                        recipients.isEmpty ||
+                        busy ||
+                        needsMealChoice
+                    ? null
+                    : save,
+                child: busy
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Text(
+                        '올리기',
+                        style: type(
+                          15,
+                          color:
+                              photo == null ||
+                                  recipients.isEmpty ||
+                                  needsMealChoice
+                              ? muted
+                              : cherry,
+                          weight: FontWeight.w600,
+                        ),
+                      ),
+              ),
+            ),
+        ],
       ),
       body: SafeArea(
         child: success
@@ -123,7 +192,13 @@ class _CaptureScreenState extends State<CaptureScreen> {
               selected: meal == i,
               button: true,
               child: InkWell(
-                onTap: busy ? null : () => setState(() => meal = i),
+                onTap: busy
+                    ? null
+                    : () => setState(() {
+                        meal = i;
+                        manualMeal = true;
+                        needsMealChoice = false;
+                      }),
                 borderRadius: BorderRadius.circular(24),
                 child: Container(
                   alignment: Alignment.center,
@@ -269,6 +344,14 @@ class _CaptureScreenState extends State<CaptureScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               mealSelector(),
+              if (needsMealChoice)
+                Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Text(
+                    '이 시간의 식사를 직접 골라 주세요.',
+                    style: type(12, color: cherry),
+                  ),
+                ),
               const SizedBox(height: 26),
               Text('오늘의 한마디', style: type(13, color: muted)),
               const SizedBox(height: 9),
@@ -306,12 +389,6 @@ class _CaptureScreenState extends State<CaptureScreen> {
                         }),
                 ),
               const SizedBox(height: 18),
-              PrimaryButton(
-                '식탁에 남기기',
-                onPressed: recipients.isEmpty ? null : save,
-                busy: busy,
-              ),
-              const SizedBox(height: 12),
               Center(
                 child: Text('선택한 식탁에만 나눠요.', style: type(11, color: muted)),
               ),
@@ -391,5 +468,16 @@ class _CaptureScreenState extends State<CaptureScreen> {
           ),
       ],
     ),
+  );
+}
+
+DateTime? photoCaptureTime(Uint8List bytes) {
+  final exif = img.decodeJpgExif(bytes);
+  final value = exif?.exifIfd[0x9003]?.toString();
+  final match = RegExp(r'^(\d{4}):(\d{2}):(\d{2}) (\d{2}):(\d{2}):(\d{2})')
+      .firstMatch(value ?? '');
+  if (match == null) return null;
+  return DateTime.tryParse(
+    '${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}:${match[6]}',
   );
 }
