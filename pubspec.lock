@@ -106,7 +106,7 @@ packages:
     source: hosted
     version: "5.6.12"
   cloud_firestore_platform_interface:
-    dependency: transitive
+    dependency: "direct dev"
     description:
       name: cloud_firestore_platform_interface
       sha256: "413c4e01895cf9cb3de36fa5c219479e06cd4722876274ace5dfc9f13ab2e39b"
@@ -250,7 +250,7 @@ packages:
     source: hosted
     version: "3.15.2"
   firebase_core_platform_interface:
-    dependency: transitive
+    dependency: "direct dev"
     description:
       name: firebase_core_platform_interface
       sha256: "0ecda14c1bfc9ed8cac303dd0f8d04a320811b479362a9a4efb14fd331a473ce"
