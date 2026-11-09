@@ -62,6 +62,7 @@ export default {
         !/^[A-Za-z0-9_-]{1,150}$/.test(body.reactionId))))) {
       return problem(400, 'invalid_request');
     }
+    if (route === '/nudge' && body.recipientId !== undefined && !validTable(body.recipientId)) return problem(400, 'invalid_request');
     const authorization = request.headers.get('authorization') || '';
     if (!authorization.startsWith('Bearer ') || authorization.length > 8192) return problem(401, 'unauthorized');
     let uid;
@@ -87,6 +88,8 @@ export default {
       const table = await verified.json();
       const members = table.fields?.memberIds?.arrayValue?.values?.map(x => x.stringValue);
       if (!Array.isArray(members) || members.length > 20 || !members.includes(uid)) return problem(403, 'forbidden');
+      if (route === '/nudge' && body.recipientId !== undefined &&
+        (!members.includes(body.recipientId) || body.recipientId === uid)) return problem(403, 'forbidden');
       let event = {};
       if (route === '/activity') {
         const base = `https://firestore.googleapis.com/v1/projects/${project}/databases/(default)/documents/tables/${body.tableId}/posts/${body.postId}`;
@@ -102,11 +105,11 @@ export default {
         const source = body.kind === 'comment'
           ? await read(`${base}/comments/${body.commentId}`, ['authorId', 'authorName', 'createdAt'])
           : body.kind === 'like'
-            ? await read(`${base}/reactions/${body.reactionId}`, ['userId', 'kind', 'createdAt']) : post;
+            ? await read(`${base}/reactions/${body.reactionId}`, ['userId', 'kind', 'createdAt', 'authorName']) : post;
         const created = Date.parse(source?.createdAt?.timestampValue);
         if ((body.kind === 'like' ? source?.userId?.stringValue : source?.authorId?.stringValue) !== uid || !Number.isFinite(created)
           || created < Date.now() - day || created > Date.now() + 60000) return problem(403, 'forbidden');
-        if (body.kind === 'like' && (!['heart', 'yum'].includes(source.kind?.stringValue)
+        if (body.kind === 'like' && (!['heart', 'yum', 'sticker'].includes(source.kind?.stringValue)
           || body.reactionId !== `${uid}_${source.kind.stringValue}`)) return problem(403, 'forbidden');
         // Recipients and copy come exclusively from authenticated stored records.
         event = {
@@ -124,7 +127,7 @@ export default {
         method: 'POST', body: JSON.stringify({tableId: body.tableId, uid, members,
           ...(route === '/devices' ? {token: body.token, environment: body.environment,
             preferences: body.preferences} : {}),
-          ...(route === '/nudge' ? {meal: body.meal, requestId: body.requestId} : {}),
+          ...(route === '/nudge' ? {meal: body.meal, requestId: body.requestId, recipientId: body.recipientId} : {}),
           ...event})}));
     } catch { return problem(503, 'unavailable'); }
   },
@@ -168,7 +171,7 @@ export class NudgeRegistry {
     const activity = route === '/activity';
     const kind = activity ? data.kind : 'nudge';
     const recipients = [...new Set(data.members)].filter(uid => uid !== data.uid
-      && (!['comment', 'like'].includes(kind) || uid === data.recipientId));
+      && (kind === 'post' || !data.recipientId || uid === data.recipientId));
     const devices = [];
     for (const uid of recipients) {
       const device = await this.storage.get(`user:${uid}`);
@@ -193,7 +196,7 @@ export class NudgeRegistry {
       return await sending;
     }
     const requestKey = `request:${data.uid}:${data.requestId}`;
-    const cooldownKey = `cooldown:${data.tableId}:${data.meal}`;
+    const cooldownKey = `cooldown:${data.tableId}:${data.meal}:${data.recipientId ?? "all"}`;
     const reserved = await this.storage.transaction(async tx => {
       const previous = await tx.get(requestKey);
       if (previous && previous.expires > now) {
@@ -225,10 +228,12 @@ export class NudgeRegistry {
       const alert = data.kind === 'post'
         ? {title: `${data.authorName}님이 ${meals[data.meal] ?? '밥'} 사진을 올렸어요`, body: '우리 식탁에서 오늘의 한 끼를 확인해 봐요.'}
         : data.kind === 'like'
-          ? {title: '내 밥 사진에 새 반응이 도착했어요', body: data.reactionKind === 'heart' ? '식탁 멤버가 좋아요를 보냈어요.' : '식탁 멤버가 맛있겠다는 반응을 남겼어요.'}
+          ? data.reactionKind === 'sticker'
+            ? {title: `${data.authorName}님이 밥풀 스티커를 붙였어요`, body: '내 밥 사진에 남겨준 마음을 확인해 봐요.'}
+            : {title: '내 밥 사진에 새 반응이 도착했어요', body: data.reactionKind === 'heart' ? '식탁 멤버가 좋아요를 보냈어요.' : '식탁 멤버가 맛있겠다는 반응을 남겼어요.'}
         : data.kind === 'comment'
           ? {title: '내 밥 사진에 새 댓글이 달렸어요', body: `${data.authorName}님이 이야기를 남겼어요.`}
-          : {title: `${meals[data.meal]} 뭐 먹어!?`, body: '한 끼 사진으로 안부를 전해줘.'};
+          : data.recipientId ? {title: '밥풀 콕! 밥 먹었어?', body: '우리 식탁에서 한 끼로 안부를 전해줘.'} : {title: `${meals[data.meal]} 뭐 먹어!?`, body: '한 끼 사진으로 안부를 전해줘.'};
       const results = await Promise.all(devices.map(async device => {
         try {
           const host = device.environment === 'sandbox' ? 'api.sandbox.push.apple.com' : 'api.push.apple.com';

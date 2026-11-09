@@ -11,6 +11,17 @@ MealPost post(String id, String user, int minute) => MealPost(
   tableIds: ['table'],
 );
 void main() {
+  test('a chosen meal day survives time-of-day composition across month/year boundaries', () {
+    final actual = DateTime(2026, 1, 1, 19, 12, 33, 45, 67);
+    final result = mealRecordTime(DateTime(2025, 12, 31), actual);
+    expect(result, DateTime(2025, 12, 31, 19, 12, 33, 45, 67));
+    expect(mealRecordTime(null, actual), actual);
+    expect(
+      () => mealRecordTime(DateTime(2026, 1, 2), actual),
+      throwsArgumentError,
+    );
+  });
+
   test('capture time boundaries and gaps', () {
     for (final row in [
       (5, 0, 0),

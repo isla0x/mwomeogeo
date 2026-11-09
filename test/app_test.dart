@@ -12,6 +12,13 @@ import 'package:mwomeogeo/store.dart';
 import 'package:mwomeogeo/models.dart';
 import 'package:mwomeogeo/post_card.dart';
 
+void appTest(String description, Future<void> Function(WidgetTester) body) =>
+    testWidgets(
+      description,
+      body,
+      variant: TargetPlatformVariant.only(TargetPlatform.linux),
+    );
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late Directory directory;
@@ -25,6 +32,10 @@ void main() {
     final font = FontLoader('Pretendard')
       ..addFont(rootBundle.load('assets/fonts/PretendardVariable.ttf'));
     await font.load();
+    await (FontLoader('NanumSquareRound')
+          ..addFont(rootBundle.load('assets/fonts/NanumSquareRoundR.ttf'))
+          ..addFont(rootBundle.load('assets/fonts/NanumSquareRoundB.ttf')))
+        .load();
     for (final entry in {
       'MaterialIcons': 'fonts/MaterialIcons-Regular.otf',
       'packages/cupertino_icons/CupertinoIcons':
@@ -70,7 +81,120 @@ void main() {
     });
   }
 
-  testWidgets('new users create their own first room before writing', (
+  Future<DateTime> openYesterday(WidgetTester tester) async {
+    final day = DateTime.now().subtract(const Duration(days: 1));
+    await tester.tap(find.text('달력'));
+    await tester.pumpAndSettle();
+    if (day.month != DateTime.now().month) {
+      await tester.tap(find.byTooltip('이전 달'));
+      await tester.pumpAndSettle();
+    }
+    await tester.ensureVisible(
+      find.byKey(ValueKey('calendar-day-${day.year}-${day.month}-${day.day}')),
+    );
+    await tester.tap(
+      find.byKey(ValueKey('calendar-day-${day.year}-${day.month}-${day.day}')),
+    );
+    await tester.pumpAndSettle();
+    return day;
+  }
+
+  appTest('calendar day uses the home meal grouping and fixed photo columns', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await store.setDemo(false);
+    await store.createLocalTable('우리 식탁');
+    final day = DateTime.now().subtract(const Duration(days: 1));
+    for (var i = 0; i < 2; i++) {
+      store.localPosts.add(
+        MealPost(
+          id: 'history-$i',
+          author: ['기은', '채은'][i],
+          photo: 'asset:toast',
+          meal: 0,
+          date: DateTime(day.year, day.month, day.day, 8, i),
+          tableIds: [store.tableId],
+          caption: '지난 아침 $i',
+        ),
+      );
+    }
+    await tester.pumpWidget(MwomeogeoApp(store: store));
+    await tester.pumpAndSettle();
+    await openYesterday(tester);
+    final left = find.byKey(const ValueKey('post-history-0'));
+    final right = find.byKey(const ValueKey('post-history-1'));
+    expect(tester.widget<PostCard>(left).tile, isTrue);
+    expect(tester.getTopLeft(left).dy, tester.getTopLeft(right).dy);
+    expect(tester.getTopLeft(left).dx, lessThan(tester.getTopLeft(right).dx));
+    expect(find.byKey(const ValueKey('meal-section-0')), findsOneWidget);
+    expect(find.byKey(const ValueKey('meal-section-1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('meal-section-2')), findsOneWidget);
+    expect(find.text('이날 사진 추가하기'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  appTest('empty past day can add a photo and returns to that calendar day', (
+    tester,
+  ) async {
+    await store.setDemo(false);
+    await store.createLocalTable('우리 식탁');
+    final source = File('${directory.path}/late-picked.jpg');
+    await tester.runAsync(() async {
+      await source.writeAsBytes(
+        (await rootBundle.load('assets/photos/bowl.jpg')).buffer.asUint8List(),
+      );
+    });
+    const picker = MethodChannel('plugins.flutter.io/image_picker');
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      picker,
+      (_) async => source.path,
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        picker,
+        null,
+      ),
+    );
+    await tester.pumpWidget(MwomeogeoApp(store: store));
+    await tester.pumpAndSettle();
+    final day = await openYesterday(tester);
+    await tester.tap(find.text('이날 사진 추가하기'));
+    await tester.pumpAndSettle();
+    final capture = tester.widget<CaptureScreen>(find.byType(CaptureScreen));
+    expect(sameDay(capture.recordedDate!, day), isTrue);
+    expect(find.byKey(const ValueKey('recorded-date')), findsOneWidget);
+    await tester.ensureVisible(find.text('기존 사진 고르기'));
+    await tester.runAsync(() async {
+      await tester.tap(find.text('기존 사진 고르기'));
+      for (var i = 0; i < 300; i++) {
+        await tester.pump();
+        if (find.text('사진 바꾸기').evaluate().isNotEmpty) break;
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    });
+    await tester.pumpAndSettle();
+    await tester.runAsync(() async {
+      await tester.tap(find.text('올리기'));
+      for (var i = 0; i < 300 && store.localPosts.isEmpty; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    });
+    await tester.pumpAndSettle();
+    expect(sameDay(store.localPosts.single.date, day), isTrue);
+    expect(store.postsOn(DateTime.now()), isEmpty);
+    await tester.ensureVisible(find.text('우리 식탁으로 돌아가기'));
+    await tester.tap(find.text('우리 식탁으로 돌아가기'));
+    await tester.pumpAndSettle();
+    expect(find.text('${day.month}월 ${day.day}일의 밥상'), findsOneWidget);
+    expect(find.byType(PostCard), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  appTest('new users create their own first room before writing', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(390, 844);
@@ -124,7 +248,7 @@ void main() {
     );
     expect(tester.takeException(), isNull);
   });
-  testWidgets(
+  appTest(
     'reference feed, calendar and empty state render at native iPhone size',
     (tester) async {
       tester.view.physicalSize = const Size(390, 844);
@@ -139,7 +263,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.text('오늘도, 잘 먹었어?'), findsOneWidget);
+      expect(find.text('오늘의 식탁'), findsOneWidget);
       expect(find.text('지우'), findsWidgets);
       expect(tester.takeException(), isNull);
       await screenshot(tester, key, '01-feed');
@@ -154,9 +278,10 @@ void main() {
         scrollable: find.byType(Scrollable).first,
       );
       expect(find.bySemanticsLabel('저녁 남기기'), findsOneWidget);
-      await tester.tap(find.text('기록'));
+      await tester.tap(find.text('달력'));
       await tester.pumpAndSettle();
-      expect(find.text('우리의 하루.'), findsOneWidget);
+      expect(find.text('${DateTime.now().month}월'), findsOneWidget);
+      expect(tester.getTopLeft(find.text('올리기')).dy, lessThan(70));
       expect(tester.takeException(), isNull);
       await screenshot(tester, key, '02-calendar');
       await tester.tap(find.text('식탁'));
@@ -173,81 +298,92 @@ void main() {
       }
       expect(tester.takeException(), isNull);
       await screenshot(tester, key, '03-empty');
-      await tester.tap(find.text('남기기'));
+      await tester.tap(find.text('올리기'));
       await tester.pumpAndSettle();
       expect(find.text('사진첩에는 저장하지 않아요'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await screenshot(tester, key, '04-camera');
     },
   );
-  testWidgets(
-    'same meal uses two columns, odd rows and narrow-screen fallback',
-    (tester) async {
-      tester.view.physicalSize = const Size(390, 844);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-      await store.setDemo(false);
-      await store.createLocalTable('우리 식탁');
-      for (var i = 0; i < 3; i++) {
-        store.localPosts.add(
-          MealPost(
-            id: 'pair-$i',
-            author: ['지우', '채은', '엄마'][i],
-            authorId: 'local',
-            photo: 'asset:${i == 1 ? 'bowl' : 'toast'}',
-            meal: 0,
-            date: DateTime.now(),
-            tableIds: [store.tableId],
-            caption: '아침도 든든하게 $i',
-          ),
-        );
-      }
-      final key = GlobalKey();
-      await tester.pumpWidget(
-        RepaintBoundary(
-          key: key,
-          child: MwomeogeoApp(store: store),
+  appTest('same meal uses two columns, odd rows and narrow-screen fallback', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await store.setDemo(false);
+    await store.createLocalTable('우리 식탁');
+    for (var i = 0; i < 3; i++) {
+      store.localPosts.add(
+        MealPost(
+          id: 'pair-$i',
+          author: ['지우', '채은', '엄마'][i],
+          authorId: 'local',
+          photo: 'asset:${i == 1 ? 'bowl' : 'toast'}',
+          meal: 0,
+          date: DateTime.now(),
+          tableIds: [store.tableId],
+          caption: '아침도 든든하게 $i',
         ),
       );
-      await tester.pumpAndSettle();
-      final ordered = store
-          .mealRows(store.postsOn(DateTime.now(), meal: 0))
-          .expand((row) => row)
-          .whereType<MealPost>()
-          .toList();
-      final first = find.byKey(ValueKey('post-${ordered[0].id}'));
-      final second = find.byKey(ValueKey('post-${ordered[1].id}'));
-      final third = find.byKey(ValueKey('post-${ordered[2].id}'));
-      expect(tester.getTopLeft(first).dy, tester.getTopLeft(second).dy);
-      expect(
-        tester.getTopLeft(second).dx,
-        greaterThan(tester.getTopLeft(first).dx),
-      );
-      expect(
-        tester.getTopLeft(third).dy,
-        greaterThan(tester.getTopLeft(first).dy),
-      );
-      expect(tester.widget<PostCard>(first).tile, isTrue);
-      expect(tester.takeException(), isNull);
-      await screenshot(tester, key, '07-paired-meals');
-      await tester.tap(find.bySemanticsLabel('아침 사진 크게 보기').first);
-      await tester.pumpAndSettle();
-      expect(find.text('아침의 기록'), findsOneWidget);
-      await tester.tap(find.byTooltip('닫기'));
-      await tester.pumpAndSettle();
-      tester.platformDispatcher.textScaleFactorTestValue = 1.5;
-      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-      await tester.pumpAndSettle();
-      expect(tester.widget<PostCard>(first).tile, isFalse);
-      tester.platformDispatcher.clearTextScaleFactorTestValue();
-      tester.view.physicalSize = const Size(320, 568);
-      await tester.pumpAndSettle();
-      expect(tester.widget<PostCard>(first).tile, isFalse);
-      expect(tester.takeException(), isNull);
-    },
-  );
-  testWidgets(
+    }
+    final key = GlobalKey();
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: key,
+        child: MwomeogeoApp(store: store),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final ordered = store
+        .mealRows(store.postsOn(DateTime.now(), meal: 0))
+        .expand((row) => row)
+        .whereType<MealPost>()
+        .toList();
+    final first = find.byKey(ValueKey('post-${ordered[0].id}'));
+    final second = find.byKey(ValueKey('post-${ordered[1].id}'));
+    final third = find.byKey(ValueKey('post-${ordered[2].id}'));
+    expect(tester.getTopLeft(first).dy, tester.getTopLeft(second).dy);
+    expect(
+      tester.getTopLeft(second).dx,
+      greaterThan(tester.getTopLeft(first).dx),
+    );
+    await tester.scrollUntilVisible(
+      third,
+      100,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester.getTopLeft(third).dy,
+      greaterThan(tester.getTopLeft(first).dy),
+    );
+    await tester.scrollUntilVisible(
+      first,
+      -100,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    expect(tester.widget<PostCard>(first).tile, isTrue);
+    expect(tester.takeException(), isNull);
+    await screenshot(tester, key, '07-paired-meals');
+    await tester.tap(find.bySemanticsLabel('아침 사진 크게 보기').first);
+    await tester.pumpAndSettle();
+    expect(find.text('아침의 기록'), findsOneWidget);
+    await tester.tap(find.byTooltip('닫기'));
+    await tester.pumpAndSettle();
+    tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await tester.pumpAndSettle();
+    expect(tester.widget<PostCard>(first).tile, isFalse);
+    tester.platformDispatcher.clearTextScaleFactorTestValue();
+    tester.view.physicalSize = const Size(320, 568);
+    await tester.pumpAndSettle();
+    expect(tester.widget<PostCard>(first).tile, isFalse);
+    expect(tester.takeException(), isNull);
+  });
+  appTest(
     'compose preserves caption, photo and recipient when dismissing keyboard',
     (tester) async {
       tester.view.physicalSize = const Size(390, 844);
@@ -282,7 +418,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('남기기'));
+      await tester.tap(find.text('올리기'));
       await tester.pumpAndSettle();
       await tester.runAsync(
         () => precacheImage(FileImage(source), key.currentContext!),
@@ -326,7 +462,7 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
-  testWidgets('record actions cancel safely and deletion needs confirmation', (
+  appTest('record actions cancel safely and deletion needs confirmation', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(390, 844);
@@ -382,7 +518,7 @@ void main() {
     expect(store.localPosts, isEmpty);
     expect(tester.takeException(), isNull);
   });
-  testWidgets('name sheet rejects blank names and fits a visible keyboard', (
+  appTest('name sheet rejects blank names and fits a visible keyboard', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(390, 844);
@@ -398,8 +534,9 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('내 정보와 식탁 관리'));
+    await tester.tap(find.text('설정'));
     await tester.pumpAndSettle();
+    await screenshot(tester, key, '15-settings');
     await tester.tap(find.text('이름 변경'));
     await tester.pumpAndSettle();
     tester.view.viewInsets = const FakeViewPadding(bottom: 300);
@@ -438,8 +575,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
     expect(tester.takeException(), isNull);
   });
-  testWidgets(
-    'meal nudge preview targets lunch and notification opens the allowed feed',
+  appTest(
+    'photo rice menu sends preview poke and notification opens allowed feed',
     (tester) async {
       tester.view.physicalSize = const Size(390, 844);
       tester.view.devicePixelRatio = 1;
@@ -454,37 +591,29 @@ void main() {
       );
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
-        find.byTooltip('점심 알림 보내기'),
+        find.byTooltip('밥풀 콕 · 스티커').first,
         200,
         scrollable: find.byType(Scrollable).first,
       );
-      await tester.tap(find.byTooltip('점심 알림 보내기'));
+      await tester.tap(find.byTooltip('밥풀 콕 · 스티커').first);
       await tester.pumpAndSettle();
-      expect(find.text('점심 뭐 먹어!?'), findsOneWidget);
-      expect(find.text('미리보기예요. 실제 알림은 보내지 않아요.'), findsOneWidget);
-      expect(
-        tester
-            .widget<FilledButton>(
-              find.widgetWithText(FilledButton, '점심 알림 보내기'),
-            )
-            .onPressed,
-        isNull,
-      );
-      await screenshot(tester, key, '14-meal-nudge');
-      await tester.tap(find.byTooltip('닫기'));
+      expect(find.text('사진에 스티커 붙이기'), findsOneWidget);
+      await tester.tap(find.text('밥풀 콕 찌르기'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('기록'));
+      expect(find.text('미리보기 콕이에요.'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 4));
+      await tester.tap(find.text('달력'));
       await tester.pumpAndSettle();
       store.nudges.onOpen?.call('not-a-member');
       await tester.pumpAndSettle();
-      expect(find.text('우리의 하루.'), findsOneWidget);
+      expect(find.text('${DateTime.now().month}월'), findsOneWidget);
       store.nudges.onOpen?.call(store.tableId);
       await tester.pumpAndSettle();
-      expect(find.text('오늘도, 잘 먹었어?'), findsOneWidget);
+      expect(find.text('오늘의 식탁'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
-  testWidgets('small display and large text retain usable navigation', (
+  appTest('small display and large text retain usable navigation', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(320, 568);
@@ -503,7 +632,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     await screenshot(tester, key, '05-small-text');
-    await tester.tap(find.text('남기기'));
+    await tester.tap(find.text('올리기'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });

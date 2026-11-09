@@ -19,6 +19,7 @@
 		9AEAAD28618761084C273D89 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0020E2936D88E7C09D647C4A /* Foundation.framework */; };
 		CA78A696248CDB195A144695 /* MealCaptureWidget.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = A4EA809B350A9D99659EE4A4 /* MealCaptureWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		FCC76C8FB490A36378C478CB /* MealCaptureWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 743111A99F1DAB8503F75BE1 /* MealCaptureWidget.swift */; };
+		B7D0036815E640E09AE02E11 /* Widget Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B7D0036815E640E09AE02E12 /* Widget Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -71,6 +72,7 @@
 		331C8081294A63A400263BE5 /* RunnerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RunnerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = AppFrameworkInfo.plist; path = Flutter/AppFrameworkInfo.plist; sourceTree = "<group>"; };
 		743111A99F1DAB8503F75BE1 /* MealCaptureWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MealCaptureWidget.swift; sourceTree = "<group>"; };
+		B7D0036815E640E09AE02E12 /* Widget Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Runner-Bridging-Header.h"; sourceTree = "<group>"; };
 		74858FAE1ED2DC5600515810 /* AppDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
@@ -178,6 +180,7 @@
 			isa = PBXGroup;
 			children = (
 				743111A99F1DAB8503F75BE1 /* MealCaptureWidget.swift */,
+				B7D0036815E640E09AE02E12 /* Widget Assets.xcassets */,
 				805F610DD62D27E993E3583B /* Info.plist */,
 			);
 			name = MealCaptureWidget;
@@ -314,6 +317,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B7D0036815E640E09AE02E11 /* Widget Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

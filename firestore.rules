@@ -62,7 +62,11 @@ service cloud.firestore {
         allow read: if member(tableId);
         allow create: if member(tableId)
           && request.resource.data.keys().hasAll(['authorId','authorName','photoPath','meal','caption','createdAt','updatedAt'])
-          && request.resource.data.keys().hasOnly(['authorId','authorName','photoPath','meal','caption','createdAt','updatedAt'])
+          && request.resource.data.keys().hasOnly(['authorId','authorName','photoPath','meal','caption','createdAt','updatedAt','recordedAt'])
+          && (!('recordedAt' in request.resource.data)
+              || (request.resource.data.recordedAt is timestamp
+                  && request.resource.data.recordedAt>=timestamp.date(2000,1,1)
+                  && request.resource.data.recordedAt<=request.time+duration.value(1,'d')))
           && request.resource.data.authorId==request.auth.uid && text(request.resource.data.authorName,12)
           && request.resource.data.meal is int && request.resource.data.meal>=0 && request.resource.data.meal<=2
           && request.resource.data.caption is string && request.resource.data.caption.size()<=80
@@ -89,15 +93,27 @@ service cloud.firestore {
         }
         match /reactions/{reactionId} {
           allow read: if member(tableId);
-          allow create: if member(tableId) && active(tableId,postId)
-            && request.resource.data.keys().hasAll(['userId','kind'])
-            && request.resource.data.keys().hasOnly(['userId','kind','createdAt'])
-            && request.resource.data.get('createdAt',request.time)==request.time
-            && request.resource.data.userId==request.auth.uid && request.resource.data.kind in ['heart','yum']
-            && reactionId==request.auth.uid+'_'+request.resource.data.kind;
+          function sticker() {
+            let d = request.resource.data;
+            return d.keys().hasAll(['userId','kind','authorName','variant','x','y','scale','createdAt'])
+              && d.keys().hasOnly(['userId','kind','authorName','variant','x','y','scale','createdAt'])
+              && d.userId==request.auth.uid && d.kind=='sticker'
+              && reactionId==request.auth.uid+'_sticker'
+              && post(tableId,postId).authorId!=request.auth.uid
+              && text(d.authorName,12) && d.variant is int && d.variant>=0 && d.variant<5
+              && d.x is number && d.x>=0 && d.x<=1 && d.y is number && d.y>=0 && d.y<=1
+              && d.scale is number && d.scale>=0.14 && d.scale<=0.38 && d.createdAt==request.time;
+          }
+          allow create: if member(tableId) && active(tableId,postId) && (sticker()
+            || (request.resource.data.keys().hasAll(['userId','kind'])
+              && request.resource.data.keys().hasOnly(['userId','kind','createdAt'])
+              && request.resource.data.get('createdAt',request.time)==request.time
+              && request.resource.data.userId==request.auth.uid && request.resource.data.kind in ['heart','yum']
+              && reactionId==request.auth.uid+'_'+request.resource.data.kind));
+          allow update: if member(tableId) && active(tableId,postId)
+            && resource.data.userId==request.auth.uid && sticker();
           allow delete: if removing(tableId,postId)
             || (member(tableId) && active(tableId,postId) && resource.data.userId==request.auth.uid);
-          allow update: if false;
         }
       }
     }

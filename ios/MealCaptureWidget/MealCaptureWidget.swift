@@ -13,19 +13,20 @@ struct MealProvider: TimelineProvider {
 }
 struct MealCaptureView: View {
   var body: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      HStack {
-        Text("뭐먹어?").font(.system(size: 15, weight: .bold))
-        Spacer()
-        Image(systemName: "camera.fill").font(.system(size: 24))
-      }
-      Spacer(minLength: 0)
-      Text("지금 먹는 한 끼,").font(.system(size: 18, weight: .semibold))
-      Text("사진으로 안부.").font(.system(size: 21, weight: .bold))
-      Text("눌러서 바로 촬영").font(.system(size: 12))
+    ZStack(alignment: .bottomTrailing) {
+      Image("RiceFriends")
+        .resizable()
+        .scaledToFit()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.bottom, 20)
+      Image("MealCamera")
+        .resizable()
+        .scaledToFit()
+        .frame(width: 32, height: 32)
     }
-    .foregroundStyle(Color(red: 0.65, green: 0.24, blue: 0.31))
-    .containerBackground(Color(red: 1, green: 0.965, blue: 0.906), for: .widget)
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel("한 끼 바로 촬영")
+    .containerBackground(Color(red: 1, green: 0.906, blue: 0.855), for: .widget)
     .widgetURL(URL(string: "mwomeogeo://capture"))
   }
 }

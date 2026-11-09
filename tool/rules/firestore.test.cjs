@@ -49,6 +49,27 @@ const {doc, collection, getDoc, getDocs, query, where, writeBatch, updateDoc,
     batch = writeBatch(owner);
     batch.set(doc(owner,meal),postData);batch.set(doc(owner,photo),photoData);
     await pass(batch.commit());
+    // A past meal date is separate from the server-authenticated creation time.
+    const late = table+'/posts/late';
+    const latePhoto = table+'/photos/late';
+    batch = writeBatch(owner);
+    batch.set(doc(owner,late),{...postData,photoPath:latePhoto,recordedAt:Timestamp.fromMillis(Date.UTC(2026,0,2,8))});
+    batch.set(doc(owner,latePhoto),photoData);
+    await pass(batch.commit());
+    const loaded = await getDoc(doc(guest,late));
+    if (loaded.data().recordedAt.toDate().getUTCDate()!==2) throw Error('Recorded day was lost');
+    await fail(updateDoc(doc(owner,late),{recordedAt:serverTimestamp(),updatedAt:serverTimestamp()}));
+    for (const [suffix,value] of [['text','yesterday'],['future',Timestamp.fromMillis(Date.now()+3*86400000)]]) {
+      batch = writeBatch(owner);
+      batch.set(doc(owner,table+'/posts/'+suffix),{...postData,photoPath:table+'/photos/'+suffix,recordedAt:value});
+      batch.set(doc(owner,table+'/photos/'+suffix),photoData);
+      await fail(batch.commit());
+    }
+    // The actual upload timestamp cannot be backdated to bypass activity checks.
+    batch = writeBatch(owner);
+    batch.set(doc(owner,table+'/posts/forged-date'),{...postData,photoPath:table+'/photos/forged-date',createdAt:Timestamp.fromMillis(1)});
+    batch.set(doc(owner,table+'/photos/forged-date'),photoData);
+    await fail(batch.commit());
     await pass(getDoc(doc(guest,photo)));
     await fail(getDoc(doc(outsider,photo)));
     await fail(getDoc(doc(nobody,meal)));
@@ -65,6 +86,14 @@ const {doc, collection, getDoc, getDocs, query, where, writeBatch, updateDoc,
     await pass(setDoc(doc(guest,meal+'/reactions/guest_heart'),{userId:'guest',kind:'heart'}));
     await pass(setDoc(doc(guest,meal+'/reactions/guest_yum'),{userId:'guest',kind:'yum',createdAt:serverTimestamp()}));
     await fail(setDoc(doc(guest,meal+'/reactions/guest_bad'),{userId:'guest',kind:'heart',createdAt:Timestamp.fromMillis(1)}));
+    const sticker = {userId:'guest',kind:'sticker',authorName:'친구',variant:2,x:.8,y:.8,scale:.24,createdAt:serverTimestamp()};
+    await pass(setDoc(doc(guest,meal+'/reactions/guest_sticker'),sticker));
+    await fail(setDoc(doc(owner,meal+'/reactions/guest_sticker'),{...sticker,x:.1}));
+    await fail(setDoc(doc(owner,meal+'/reactions/owner_sticker'),{...sticker,userId:'owner'}));
+    await fail(setDoc(doc(guest,meal+'/reactions/guest_sticker'),{...sticker,x:2}));
+    await fail(setDoc(doc(guest,meal+'/reactions/guest_sticker'),{...sticker,variant:5}));
+    await pass(setDoc(doc(guest,meal+'/reactions/guest_sticker'),{...sticker,x:.4}));
+    await pass(deleteDoc(doc(guest,meal+'/reactions/guest_sticker')));
     await fail(deleteDoc(doc(guest,meal)));
     await fail(deleteDoc(doc(guest,photo)));
     await fail(updateDoc(doc(guest,meal),{deleting:true,updatedAt:serverTimestamp()}));

@@ -210,7 +210,7 @@ test('nudge route cannot forge activity payloads or bypass its consent category'
     kind: 'comment', recipientId: 'receiver', authorName: 'forged', postId: 'fake'}), env);
   assert.equal(result.status, 200);
   assert.equal(pushes[0].payload.kind, undefined);
-  assert.equal(pushes[0].payload.aps.alert.title, '점심 뭐 먹어!?');
+  assert.equal(pushes[0].payload.aps.alert.title, '밥풀 콕! 밥 먹었어?');
 });
 
 test('likes notify only the opted-in photo owner; duplicate/retracted/forged reactions do not push', async () => {
@@ -233,4 +233,23 @@ test('likes notify only the opted-in photo owner; duplicate/retracted/forged rea
   records.delete('p1/reactions/sender_heart');
   assert.equal((await activity('like', {reactionId: 'sender_heart'})).status, 403);
   assert.equal(pushes.length, 1);
+});
+
+ test('targeted rice poke rejects outsiders and only delivers to chosen member', async () => {
+  await setup(); members.push('third');
+  await register('receiver'); await register('third', undefined, 'b'.repeat(64));
+  const denied = await worker.fetch(request('/nudge', {tableId:'table',meal:1,requestId:id(91),recipientId:'outsider'}),env);
+  assert.equal(denied.status,403);
+  const sent = await worker.fetch(request('/nudge', {tableId:'table',meal:1,requestId:id(92),recipientId:'receiver'}),env);
+  assert.equal(sent.status,200); assert.equal(pushes.length,1);
+ });
+
+test('sticker notification uses stored sender and goes only to photo owner', async () => {
+  await setup(); await register('receiver', {nudge:false,post:false,comment:false,like:true});
+  records.set('meal', record('receiver'));
+  records.set('meal/reactions/sender_sticker', {userId:{stringValue:'sender'}, kind:{stringValue:'sticker'},
+    authorName:{stringValue:'채은'}, createdAt:{timestampValue:new Date().toISOString()}});
+  const result = await worker.fetch(request('/activity', {tableId:'table',postId:'meal',kind:'like',reactionId:'sender_sticker'}), env);
+  assert.equal(result.status,200); assert.equal(pushes.length,1);
+  assert.match(pushes[0].payload.aps.alert.title, /밥풀 스티커/);
 });

@@ -41,6 +41,38 @@ class MealComment {
   Map<String, dynamic> toJson() => {'name': name, 'text': text};
 }
 
+const riceStickerNames = ['냠냠', '배불러', '하트', '배달', '함께'];
+
+class RiceSticker {
+  const RiceSticker(
+    this.userId,
+    this.name,
+    this.variant,
+    this.x,
+    this.y,
+    this.scale,
+  );
+  final String userId, name;
+  final int variant;
+  final double x, y, scale;
+  Map<String, dynamic> toJson() => {
+    'userId': userId,
+    'name': name,
+    'variant': variant,
+    'x': x,
+    'y': y,
+    'scale': scale,
+  };
+  factory RiceSticker.fromJson(Map<String, dynamic> j) => RiceSticker(
+    j['userId'] as String,
+    j['name'] as String,
+    j['variant'] as int,
+    (j['x'] as num).toDouble(),
+    (j['y'] as num).toDouble(),
+    (j['scale'] as num).toDouble(),
+  );
+}
+
 class MealPost {
   MealPost({
     required this.id,
@@ -54,8 +86,10 @@ class MealPost {
     this.authorId,
     Set<String>? reactions,
     List<MealComment>? comments,
+    List<RiceSticker>? stickers,
   }) : reactions = reactions ?? {},
-       comments = comments ?? [];
+       comments = comments ?? [],
+       stickers = stickers ?? [];
   final String id;
   final String author;
   final String? authorId;
@@ -67,6 +101,7 @@ class MealPost {
   final bool isDemo;
   final Set<String> reactions;
   final List<MealComment> comments;
+  final List<RiceSticker> stickers;
   bool get isCloud => photo.startsWith('cloud:');
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -77,9 +112,13 @@ class MealPost {
     'tables': tableIds,
     'caption': caption,
     'reactions': reactions.toList(),
+    'stickers': stickers.map((s) => s.toJson()).toList(),
     'comments': comments.map((c) => c.toJson()).toList(),
   };
   factory MealPost.fromJson(Map<String, dynamic> j) => MealPost(
+    stickers: (j['stickers'] as List? ?? [])
+        .map((s) => RiceSticker.fromJson(Map<String, dynamic>.from(s)))
+        .toList(),
     id: j['id'] as String,
     author: j['author'] as String,
     photo: j['photo'] as String,
@@ -158,4 +197,24 @@ int? mealAtCaptureTime(DateTime time) {
   if (minute >= 11 * 60 && minute <= 16 * 60) return 1;
   if (minute >= 17 * 60 && minute <= 22 * 60) return 2;
   return null;
+}
+
+// Calendar day and upload time are distinct: a late entry keeps its chosen day.
+DateTime mealRecordTime(DateTime? day, DateTime uploadedAt) {
+  if (day == null) return uploadedAt;
+  final selected = DateTime(day.year, day.month, day.day);
+  final today = DateTime(uploadedAt.year, uploadedAt.month, uploadedAt.day);
+  if (selected.year < 2000 || selected.isAfter(today)) {
+    throw ArgumentError('오늘 또는 지난 날짜를 골라 주세요.');
+  }
+  return DateTime(
+    day.year,
+    day.month,
+    day.day,
+    uploadedAt.hour,
+    uploadedAt.minute,
+    uploadedAt.second,
+    uploadedAt.millisecond,
+    uploadedAt.microsecond,
+  );
 }

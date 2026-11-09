@@ -239,12 +239,14 @@ class MealNudges extends ChangeNotifier {
     String tableId,
     int meal, {
     required String requestId,
+    String? recipientId,
   }) async {
     if (meal < 0 || meal > 2) throw ArgumentError.value(meal, 'meal');
     final result = await _request('/nudge', {
       'tableId': tableId,
       'meal': meal,
       'requestId': requestId,
+      'recipientId': ?recipientId,
     });
     final accepted = result['accepted'];
     if (accepted is! int || accepted < 1) {

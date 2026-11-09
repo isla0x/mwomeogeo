@@ -17,10 +17,16 @@ class CaptureScreen extends StatefulWidget {
     required this.store,
     required this.initialMeal,
     this.openCamera = false,
+    this.recordedDate,
+    this.initialPhoto,
+    this.openGallery = false,
   });
   final MealStore store;
   final int initialMeal;
   final bool openCamera;
+  final DateTime? recordedDate;
+  final File? initialPhoto;
+  final bool openGallery;
   @override
   State<CaptureScreen> createState() => _CaptureScreenState();
 }
@@ -35,6 +41,14 @@ class _CaptureScreenState extends State<CaptureScreen> {
   @override
   void initState() {
     super.initState();
+    photo = widget.initialPhoto;
+    needsMealChoice =
+        photo != null && mealAtCaptureTime(DateTime.now()) == null;
+    if (widget.openGallery) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) pick(ImageSource.gallery);
+      });
+    }
     if (widget.openCamera) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) pick(ImageSource.camera);
@@ -105,6 +119,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
         meal: meal,
         caption: caption.text.trim(),
         tableIds: recipients.toList(),
+        recordedDate: widget.recordedDate,
       );
       if (mounted) setState(() => success = true);
     } catch (e) {
@@ -170,11 +185,38 @@ class _CaptureScreenState extends State<CaptureScreen> {
         ],
       ),
       body: SafeArea(
-        child: success
-            ? successView()
-            : photo == null
-            ? camera()
-            : compose(),
+        child: Column(
+          children: [
+            if (widget.recordedDate != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+                child: Row(
+                  children: [
+                    const AppIcon(
+                      CupertinoIcons.calendar,
+                      size: 16,
+                      color: cherry,
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        '${widget.recordedDate!.year}년 ${widget.recordedDate!.month}월 ${widget.recordedDate!.day}일에 남겨요',
+                        key: const ValueKey('recorded-date'),
+                        style: type(13, color: cherry),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            Expanded(
+              child: success
+                  ? successView()
+                  : photo == null
+                  ? camera()
+                  : compose(),
+            ),
+          ],
+        ),
       ),
     ),
   );
@@ -240,7 +282,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(CupertinoIcons.camera, size: 42, color: muted),
+                const AppIcon(CupertinoIcons.camera, size: 42, color: muted),
                 const SizedBox(height: 20),
                 Text(
                   '오늘의 한 끼를 담아주세요.',
@@ -261,14 +303,14 @@ class _CaptureScreenState extends State<CaptureScreen> {
           const SizedBox(height: 8),
           TextButton.icon(
             onPressed: busy ? null : () => pick(ImageSource.gallery),
-            icon: const Icon(CupertinoIcons.photo, size: 18),
+            icon: const AppIcon(CupertinoIcons.photo, size: 18),
             label: const Text('기존 사진 고르기'),
           ),
           const SizedBox(height: 20),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(CupertinoIcons.lock_shield, size: 14, color: muted),
+              const AppIcon(CupertinoIcons.lock_shield, size: 14, color: muted),
               const SizedBox(width: 6),
               Flexible(
                 child: Text('사진첩에는 저장하지 않아요', style: type(12, color: muted)),
@@ -328,10 +370,10 @@ class _CaptureScreenState extends State<CaptureScreen> {
                     foregroundColor: ink,
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(22),
                     ),
                   ),
-                  icon: const Icon(CupertinoIcons.photo, size: 17),
+                  icon: const AppIcon(CupertinoIcons.photo, size: 17),
                   label: Text('사진 바꾸기', style: type(12)),
                 ),
               ),
@@ -406,12 +448,8 @@ class _CaptureScreenState extends State<CaptureScreen> {
         Container(
           width: 115,
           height: 115,
-          decoration: const BoxDecoration(color: sky, shape: BoxShape.circle),
-          child: const Icon(
-            CupertinoIcons.tray,
-            size: 48,
-            color: Color(0xff6b899f),
-          ),
+          decoration: const BoxDecoration(color: soft, shape: BoxShape.circle),
+          child: const CuteIcon(MealGlyph.rooms, size: 78),
         ),
         const SizedBox(height: 30),
         Text(

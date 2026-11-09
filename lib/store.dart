@@ -247,12 +247,14 @@ class MealStore extends ChangeNotifier {
     required int meal,
     required String caption,
     required List<String> tableIds,
+    DateTime? recordedDate,
   }) async {
     if (demo ||
         tableIds.isEmpty ||
         tableIds.any((id) => !tables.any((table) => table.id == id))) {
       throw ArgumentError('먼저 식탁을 만들거나 초대 코드로 참여해 주세요.');
     }
+    final recordedAt = mealRecordTime(recordedDate, DateTime.now());
     final local = tableIds.where((id) => id.startsWith('local-')).toList();
     final remote = tableIds.where((id) => !id.startsWith('local-')).toList();
     // Mixed local and remote destinations are disabled in the composer so a
@@ -267,6 +269,7 @@ class MealStore extends ChangeNotifier {
         caption,
         remote,
         name,
+        recordedAt: recordedAt,
       );
       remotePosts.insertAll(0, delivered);
       for (final post in delivered) {
@@ -288,7 +291,7 @@ class MealStore extends ChangeNotifier {
         author: name,
         photo: photo,
         meal: meal,
-        date: DateTime.now(),
+        date: recordedAt,
         tableIds: local,
         caption: caption,
       );
@@ -307,6 +310,36 @@ class MealStore extends ChangeNotifier {
     } catch (_) {}
     demo = false;
     selectTable(tableIds.first);
+  }
+
+  Future<void> putSticker(MealPost post, RiceSticker? sticker) async {
+    final uid = post.isCloud ? cloud.userId! : 'local';
+    if (post.isCloud && post.authorId == uid) {
+      throw ArgumentError('상대 사진에 붙여 주세요.');
+    }
+    final old = post.stickers.where((s) => s.userId == uid).firstOrNull;
+    if (post.isCloud) {
+      await cloud.putSticker(post, sticker);
+      if (sticker != null && old == null) {
+        await nudges.activity(
+          post.tableIds.single,
+          post.id,
+          reactionId: '${uid}_sticker',
+        );
+      }
+      await refresh();
+      return;
+    }
+    post.stickers.removeWhere((s) => s.userId == uid);
+    if (sticker != null) post.stickers.add(sticker);
+    try {
+      if (!post.isDemo) await _save();
+    } catch (_) {
+      post.stickers.removeWhere((s) => s.userId == uid);
+      if (old != null) post.stickers.add(old);
+      rethrow;
+    }
+    notifyListeners();
   }
 
   Future<void> react(MealPost post, String kind) async {

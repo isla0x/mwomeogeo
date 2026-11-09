@@ -6,14 +6,18 @@ import 'package:flutter/material.dart';
 
 import 'models.dart';
 import 'store.dart';
+import 'app_icons.dart';
+export 'app_icons.dart';
 
-const milk = Color(0xfffaf9f6);
-const cherry = Color(0xffa63d4e);
-const ink = Color(0xff272420);
-const muted = Color(0xff687580);
-const sky = Color(0xffeaf1f5);
-const line = Color(0xffe3e5e5);
-const soft = Color(0xfff3f4f3);
+const milk = Color(0xfffffcf8);
+const cherry = Color(0xffb95236);
+const ink = Color(0xff342e2d);
+const muted = Color(0xff7c6d62);
+const sky = Color(0xffffeee1);
+const line = Color(0xffeee6df);
+const soft = Color(0xfffff5ed);
+const peach = Color(0xffffddcb);
+const butter = Color(0xfff2ce79);
 const mealIcons = [
   CupertinoIcons.sunrise,
   CupertinoIcons.sun_max,
@@ -26,8 +30,9 @@ TextStyle type(
   double spacing = -.3,
   double height = 1.5,
 }) => TextStyle(
-  fontFamily: 'Pretendard',
-  fontSize: size <= 16 ? size + 2 : size,
+  fontFamily: 'NanumSquareRound',
+  fontFamilyFallback: const ['Pretendard'],
+  fontSize: size.clamp(11.0, 32.0).toDouble(),
   color: color,
   fontWeight: weight,
   letterSpacing: spacing,
@@ -50,33 +55,28 @@ class PrimaryButton extends StatelessWidget {
   Widget build(BuildContext context) => FilledButton(
     onPressed: busy ? null : onPressed,
     style: FilledButton.styleFrom(
-      backgroundColor: cherry,
+      backgroundColor: peach,
       disabledBackgroundColor: line,
-      foregroundColor: Colors.white,
-      minimumSize: const Size(double.infinity, 54),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      foregroundColor: ink,
+      elevation: 0,
+      minimumSize: const Size(double.infinity, 50),
+      shape: const StadiumBorder(),
     ),
     child: busy
         ? const SizedBox(
             width: 20,
             height: 20,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: Colors.white,
-            ),
+            child: CircularProgressIndicator(strokeWidth: 2, color: ink),
           )
         : Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Flexible(
-                child: Text(
-                  label,
-                  style: type(14, color: Colors.white, weight: FontWeight.w500),
-                ),
+                child: Text(label, style: type(14, weight: FontWeight.w500)),
               ),
               if (icon != null) ...[
                 const SizedBox(width: 10),
-                Icon(icon, size: 16),
+                AppIcon(icon, size: 18),
               ],
             ],
           ),
@@ -95,12 +95,87 @@ class Avatar extends StatelessWidget {
     decoration: const BoxDecoration(color: sky, shape: BoxShape.circle),
     child: Text(
       name.isEmpty ? '나' : name.characters.first,
-      style: type(
-        size * .37,
-        color: const Color(0xff526c80),
-        weight: FontWeight.w500,
+      style: type(size * .37, color: ink, weight: FontWeight.w500),
+    ),
+  );
+}
+
+/// Small visible artwork, with a generous accessible control area.
+class GrainToggle extends StatelessWidget {
+  const GrainToggle({
+    super.key,
+    required this.value,
+    required this.label,
+    required this.onChanged,
+  });
+  final bool value;
+  final String label;
+  final ValueChanged<bool>? onChanged;
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: label,
+    toggled: value,
+    enabled: onChanged != null,
+    onTap: onChanged == null ? null : () => onChanged!(!value),
+    child: ExcludeSemantics(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onChanged == null ? null : () => onChanged!(!value),
+        child: SizedBox(
+          width: 56,
+          height: 48,
+          child: Center(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 160),
+              width: 46,
+              height: 27,
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                color: value ? peach : line,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: AnimatedAlign(
+                duration: const Duration(milliseconds: 160),
+                alignment: value ? Alignment.centerRight : Alignment.centerLeft,
+                child: Container(
+                  width: 19,
+                  height: 21,
+                  decoration: BoxDecoration(
+                    color: milk,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: value
+                      ? const Center(child: CuteIcon(MealGlyph.check, size: 12))
+                      : null,
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     ),
+  );
+}
+
+class AppSurface extends StatelessWidget {
+  const AppSurface({
+    super.key,
+    required this.child,
+    this.padding = const EdgeInsets.all(16),
+    this.color = Colors.white,
+  });
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+  final Color color;
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: padding,
+    decoration: BoxDecoration(
+      color: color,
+      borderRadius: BorderRadius.circular(22),
+      border: Border.all(color: line, width: .6),
+    ),
+    child: child,
   );
 }
 
@@ -259,7 +334,7 @@ class PhotoFallback extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(CupertinoIcons.photo, color: muted),
+          const AppIcon(CupertinoIcons.photo, color: muted),
           const SizedBox(height: 8),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -359,7 +434,7 @@ Future<T?> showAppSheet<T>(
                       backgroundColor: soft,
                       minimumSize: const Size(44, 44),
                     ),
-                    icon: const Icon(
+                    icon: const AppIcon(
                       CupertinoIcons.xmark,
                       size: 15,
                       color: muted,
@@ -408,12 +483,10 @@ class AppOption extends StatelessWidget {
         button: true,
         selected: selected,
         child: Material(
-          color: active ? const Color(0xfff8eef0) : Colors.white,
+          color: active ? soft : Colors.white,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(17),
-            side: BorderSide(
-              color: active ? cherry.withValues(alpha: .38) : line,
-            ),
+            side: BorderSide(color: active ? peach : line),
           ),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
@@ -426,10 +499,14 @@ class AppOption extends StatelessWidget {
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: accent ? const Color(0xfff5e7ea) : soft,
+                      color: accent ? sky : soft,
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Icon(icon, size: 20, color: accent ? cherry : muted),
+                    child: AppIcon(
+                      icon,
+                      size: 20,
+                      color: accent ? cherry : muted,
+                    ),
                   ),
                   const SizedBox(width: 13),
                   Expanded(
@@ -452,7 +529,7 @@ class AppOption extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 10),
-                  Icon(
+                  AppIcon(
                     selected == null
                         ? CupertinoIcons.chevron_right
                         : active
@@ -501,10 +578,14 @@ Future<bool?> confirmDelete(
               width: 46,
               height: 46,
               decoration: BoxDecoration(
-                color: const Color(0xfff5e7ea),
+                color: sky,
                 borderRadius: BorderRadius.circular(15),
               ),
-              child: const Icon(CupertinoIcons.trash, color: cherry, size: 22),
+              child: const AppIcon(
+                CupertinoIcons.trash,
+                color: cherry,
+                size: 22,
+              ),
             ),
             const SizedBox(height: 20),
             Text(title, style: type(20, weight: FontWeight.w600, spacing: -.7)),

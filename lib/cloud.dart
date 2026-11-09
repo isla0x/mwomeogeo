@@ -185,9 +185,25 @@ class CloudApi {
       authorId: d['authorId'] as String,
       photo: 'cloud:${d['photoPath']}',
       meal: (d['meal'] as num).toInt(),
-      date: (d['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      date:
+          (d['recordedAt'] as Timestamp?)?.toDate() ??
+          (d['createdAt'] as Timestamp?)?.toDate() ??
+          DateTime.now(),
       tableIds: [tableId],
       caption: d['caption'] as String,
+      stickers: reactions.docs.where((r) => r.data()['kind'] == 'sticker').map((
+        r,
+      ) {
+        final d = r.data();
+        return RiceSticker(
+          d['userId'] as String,
+          d['authorName'] as String,
+          d['variant'] as int,
+          (d['x'] as num).toDouble(),
+          (d['y'] as num).toDouble(),
+          (d['scale'] as num).toDouble(),
+        );
+      }).toList(),
       reactions: reactions.docs
           .map((r) => '${r.data()['userId']}:${r.data()['kind']}')
           .toSet(),
@@ -270,8 +286,9 @@ class CloudApi {
     int meal,
     String caption,
     List<String> tableIds,
-    String author,
-  ) => _guard(() async {
+    String author, {
+    DateTime? recordedAt,
+  }) => _guard(() async {
     if (tableIds.isEmpty || tableIds.length > 5) {
       throw const CloudFailure('한 번에 식탁 1~5개를 선택해 주세요.');
     }
@@ -282,7 +299,7 @@ class CloudApi {
     final bytes = await compute(encodeSharedPhoto, input);
     final batch = _db.batch();
     final result = <MealPost>[];
-    final now = DateTime.now();
+    final now = recordedAt ?? DateTime.now();
     for (final tableId in tableIds) {
       final id = newId();
       final path = 'tables/$tableId/photos/$id';
@@ -293,6 +310,7 @@ class CloudApi {
         'photoPath': path,
         'meal': meal,
         'caption': caption,
+        'recordedAt': Timestamp.fromDate(now),
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
@@ -312,6 +330,28 @@ class CloudApi {
     await batch.commit();
     return result;
   });
+  Future<void> putSticker(MealPost post, RiceSticker? sticker) =>
+      _guard(() async {
+        final ref = _postCollection(post.tableIds.single).doc(post.id);
+        final reaction = ref.collection('reactions').doc('${userId}_sticker');
+        final batch = _db.batch();
+        if (sticker == null) {
+          batch.delete(reaction);
+        } else {
+          batch.set(reaction, {
+            'userId': userId,
+            'kind': 'sticker',
+            'authorName': displayName ?? '나',
+            'variant': sticker.variant,
+            'x': sticker.x,
+            'y': sticker.y,
+            'scale': sticker.scale,
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+        }
+        batch.update(ref, {'updatedAt': FieldValue.serverTimestamp()});
+        await batch.commit();
+      });
   Future<String?> react(MealPost post, String kind) => _guard(() async {
     final ref = _postCollection(post.tableIds.single).doc(post.id);
     final reaction = ref.collection('reactions').doc('${userId}_$kind');

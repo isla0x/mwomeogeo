@@ -27,6 +27,47 @@ void main() {
     await directory.delete(recursive: true);
     store.dispose();
   });
+  test(
+    'a late meal stays on the chosen date after reload and off today',
+    () async {
+      final day = DateTime.now().subtract(const Duration(days: 3));
+      final source = File('${directory.path}/late.jpg');
+      await source.writeAsBytes([255, 216, 255, 217]);
+      await store.saveMeal(
+        source: source,
+        meal: 1,
+        caption: '늦게 남긴 점심',
+        tableIds: [couple],
+        recordedDate: day,
+      );
+      expect(store.postsOn(day).single.caption, '늦게 남긴 점심');
+      expect(store.postsOn(DateTime.now()), isEmpty);
+      final restored = MealStore(store.preferences, directory);
+      await restored.load();
+      restored.selectTable(couple);
+      expect(restored.postsOn(day).single.meal, 1);
+      expect(restored.postsOn(DateTime.now()), isEmpty);
+      restored.dispose();
+    },
+  );
+  test(
+    'future dated meals fail before copying a photo or saving a record',
+    () async {
+      final source = File('${directory.path}/future.jpg');
+      await source.writeAsBytes([255, 216, 255, 217]);
+      await expectLater(
+        store.saveMeal(
+          source: source,
+          meal: 0,
+          caption: '',
+          tableIds: [couple],
+          recordedDate: DateTime.now().add(const Duration(days: 2)),
+        ),
+        throwsArgumentError,
+      );
+      expect(store.localPosts, isEmpty);
+    },
+  );
   test('deleting a legacy default room removes records permanently but preserves other rooms', () async {
     SharedPreferences.setMockInitialValues({
       'posts': jsonEncode([

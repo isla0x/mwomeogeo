@@ -97,6 +97,10 @@ Future<void> main() async {
     final font = FontLoader('Pretendard')
       ..addFont(rootBundle.load('assets/fonts/PretendardVariable.ttf'));
     await font.load();
+    await (FontLoader('NanumSquareRound')
+          ..addFont(rootBundle.load('assets/fonts/NanumSquareRoundR.ttf'))
+          ..addFont(rootBundle.load('assets/fonts/NanumSquareRoundB.ttf')))
+        .load();
     final key = GlobalKey();
     Future<void> mount(
       Size size, {
@@ -179,12 +183,12 @@ Future<void> main() async {
 
     await mount(const Size(390, 844));
     await shot('01-feed');
-    await tap('기록');
+    await tap('달력');
     await shot('02-calendar');
     await tap('식탁');
     await reloaded.setDemo(false);
     await shot('03-empty');
-    await tap('남기기');
+    await tap('올리기');
     await shot('04-camera');
     // Reset the navigation tree before checking a smaller, text-scaled display.
     runApp(const SizedBox.shrink());
@@ -194,6 +198,8 @@ Future<void> main() async {
     await shot('05-small-text');
     runApp(const SizedBox.shrink());
     await Future<void>.delayed(const Duration(milliseconds: 100));
+    // This executable is a standalone verification harness.
+    // ignore: invalid_use_of_visible_for_testing_member
     SharedPreferences.setMockInitialValues({'demo': true});
     final fresh = MealStore(await SharedPreferences.getInstance(), dir);
     await fresh.load();

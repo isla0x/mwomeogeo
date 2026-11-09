@@ -8,6 +8,7 @@ import 'package:share_plus/share_plus.dart';
 import 'design.dart';
 import 'models.dart';
 import 'store.dart';
+import 'rice_stickers.dart';
 
 class PostCard extends StatefulWidget {
   const PostCard({
@@ -49,93 +50,172 @@ class _PostCardState extends State<PostCard> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
+        Stack(
           children: [
-            Avatar(p.author, size: widget.compact ? 24 : 30),
-            const SizedBox(width: 7),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
+            Semantics(
+              button: true,
+              label: '${mealNames[p.meal]} 사진 크게 보기',
+              child: GestureDetector(
+                onTap: openPhoto,
+                child: AspectRatio(aspectRatio: 1.1, child: StickerPhoto(p, s)),
+              ),
+            ),
+            Positioned(
+              left: 8,
+              top: 8,
+              right: 43,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 9,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: milk.withValues(alpha: .96),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Text(
                     p.author,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: type(12, color: muted),
+                    style: type(11, weight: FontWeight.w500),
                   ),
-                  if (widget.tile)
-                    Text(timeLabel(p.date), style: type(10, color: muted)),
-                ],
+                ),
               ),
             ),
-            if (!widget.tile)
-              Text(timeLabel(p.date), style: type(10, color: muted)),
-            IconButton(
-              tooltip: '기록 메뉴',
-              icon: const Icon(CupertinoIcons.ellipsis, size: 18, color: muted),
-              onPressed: busy ? null : openMenu,
-            ),
-          ],
-        ),
-        Semantics(
-          button: true,
-          label: '${mealNames[p.meal]} 사진 크게 보기',
-          child: GestureDetector(
-            onTap: openPhoto,
-            child: AspectRatio(
-              aspectRatio: widget.tile
-                  ? 1.1
-                  : (widget.compact ? (p.meal == 0 ? 2 : 2.5) : 1.27),
-              child: MealPhoto(p, s, edition: false),
-            ),
-          ),
-        ),
-        if (widget.tile) caption(),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            if (!widget.tile) Expanded(child: caption()) else const Spacer(),
-            IconButton(
-              tooltip: '잘 먹었네 $likes',
-              onPressed: busy ? null : () => react('heart'),
-              icon: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    liked ? CupertinoIcons.heart_fill : CupertinoIcons.heart,
-                    size: 19,
-                    color: liked ? cherry : muted,
+            Positioned(
+              right: 0,
+              top: 0,
+              child: IconButton(
+                tooltip: '기록 메뉴',
+                onPressed: busy ? null : openMenu,
+                icon: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: milk.withValues(alpha: .94),
+                    shape: BoxShape.circle,
                   ),
-                  const SizedBox(width: 4),
-                  Text('$likes', style: type(10, color: muted)),
-                ],
-              ),
-            ),
-            IconButton(
-              tooltip: '한마디 남기기',
-              onPressed: () => openComments(context, p, s),
-              icon: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    CupertinoIcons.chat_bubble,
-                    size: 18,
+                  child: const AppIcon(
+                    CupertinoIcons.ellipsis,
+                    size: 15,
                     color: muted,
                   ),
-                  const SizedBox(width: 4),
-                  Text('${p.comments.length}', style: type(10, color: muted)),
-                ],
+                ),
               ),
             ),
           ],
         ),
-        const Divider(height: 1),
+        caption(),
+        if (p.stickers.isNotEmpty)
+          Text(
+            p.stickers.map((sticker) => '${sticker.name}의 밥풀').join(' · '),
+            style: type(10, color: muted),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        Row(
+          children: [
+            if (p.isDemo || (p.isCloud && p.authorId != s.cloud.userId))
+              IconButton(
+                tooltip: '밥풀 콕 · 스티커',
+                onPressed: busy ? null : riceActions,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 40, minHeight: 48),
+                icon: const CuteIcon(MealGlyph.rooms, size: 23),
+              ),
+            Flexible(
+              child: IconButton(
+                tooltip: '잘 먹었네 $likes',
+                onPressed: busy ? null : () => react('heart'),
+                style: IconButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                ),
+                icon: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    AppIcon(
+                      liked ? CupertinoIcons.heart_fill : CupertinoIcons.heart,
+                      size: 17,
+                    ),
+                    const SizedBox(width: 5),
+                    Text('$likes', style: type(11, color: muted)),
+                  ],
+                ),
+              ),
+            ),
+            Flexible(
+              child: IconButton(
+                tooltip: '한마디 남기기',
+                onPressed: () => openComments(context, p, s),
+                style: IconButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                ),
+                icon: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const CuteIcon(MealGlyph.comment, size: 17),
+                    const SizedBox(width: 5),
+                    Text('${p.comments.length}', style: type(11, color: muted)),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ],
     );
   }
 
+  Future<void> riceActions() async {
+    final action = await showAppSheet<String>(
+      context,
+      title: '${p.author}에게 밥풀로',
+      child: Column(
+        children: [
+          AppOption(
+            label: '밥풀 콕 찌르기',
+            subtitle: '밥 먹었어? 다정하게 안부를 보내요',
+            icon: CupertinoIcons.bell,
+            onTap: () => Navigator.pop(context, 'poke'),
+          ),
+          AppOption(
+            label: '사진에 스티커 붙이기',
+            subtitle: '상대 사진에 내 밥풀을 남겨요',
+            icon: CupertinoIcons.heart,
+            onTap: () => Navigator.pop(context, 'sticker'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    if (action == 'sticker') {
+      await editRiceSticker(context, p, s);
+    }
+    if (action == 'poke') {
+      setState(() => busy = true);
+      try {
+        if (!p.isDemo) {
+          await s.nudges.send(
+            p.tableIds.single,
+            p.meal,
+            requestId: newId(),
+            recipientId: p.authorId,
+          );
+        }
+        if (mounted) {
+          toast(context, p.isDemo ? '미리보기 콕이에요.' : '${p.author}에게 콕 보냈어요.');
+        }
+      } catch (e) {
+        if (mounted) toast(context, '$e');
+      } finally {
+        if (mounted) setState(() => busy = false);
+      }
+    }
+  }
+
   Widget caption() => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 9),
+    padding: const EdgeInsets.symmetric(vertical: 5),
     child: Text(
       p.caption.isEmpty ? '오늘도 잘 챙겨 먹었어요.' : p.caption,
       maxLines: widget.compact ? 2 : null,
@@ -150,7 +230,7 @@ class _PostCardState extends State<PostCard> {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        AspectRatio(aspectRatio: 1, child: MealPhoto(p, s, edition: false)),
+        AspectRatio(aspectRatio: 1.1, child: StickerPhoto(p, s)),
         const SizedBox(height: 16),
         Text(p.caption.isEmpty ? '오늘도 잘 챙겨 먹었어요.' : p.caption, style: type(15)),
         const SizedBox(height: 12),
